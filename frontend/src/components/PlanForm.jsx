@@ -135,7 +135,7 @@ export default function PlanForm({ form, setForm, caps, errors, production, port
           <Check label="Disable HTTP/HTTPS server" checked={form.hardening.disable_http} onChange={(v) => set('hardening.disable_http', v)} />
           <Check label="Block logins after 5 failures (120 s)" checked={form.hardening.login_block} onChange={(v) => set('hardening.login_block', v)} />
         </div>
-        <Input label="Login banner" value={form.hardening.banner} onChange={(v) => set('hardening.banner', v)} error={e('hardening.banner')} hint="One line. Letters, digits, spaces and . , : / ( ) @ + = ! ? ' -" maxLength={240} />
+        <Input label="Login banner" value={form.hardening.banner} onChange={(v) => set('hardening.banner', v)} error={e('hardening.banner')} hint="One line. Letters, digits, spaces and . , : / ( ) @ + = ! ' -" maxLength={240} />
       </Section>
 
       {has('vlans') && (

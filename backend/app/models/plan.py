@@ -12,7 +12,8 @@ from pydantic import Field, SecretStr, StringConstraints, field_validator, model
 from .common import StrictModel
 
 SAFE_TEXT = r"^[A-Za-z0-9 _.,:/()@+=-]*$"
-SAFE_BANNER = r"^[A-Za-z0-9 _.,:/()@+=!?'-]*$"
+# No "?" anywhere: typed at an IOS prompt it opens context help instead of being entered.
+SAFE_BANNER = r"^[A-Za-z0-9 _.,:/()@+=!'-]*$"
 
 Hostname = Annotated[str, StringConstraints(min_length=1, max_length=63,
                                             pattern=r"^[A-Za-z]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")]

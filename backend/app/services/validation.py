@@ -134,6 +134,9 @@ class _Ports:
 
     def check(self, r: Result, path: str, name: str, logical: bool = False) -> bool:
         if logical and LOGICAL_IF.match(name):
+            if name.startswith("Vlan") and self.model.category not in ("switch", "l3switch"):
+                r.error(path, f"{self.model.name} has no VLAN interfaces; use a physical port or a Loopback")
+                return False
             return True
         if name and self.regex.fullmatch(name):
             return True

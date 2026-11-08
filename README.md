@@ -66,6 +66,10 @@ Static checks: `ruff check .`, `bandit -c pyproject.toml -r app scripts`, `pip-a
 - **Deny by default:** the app refuses to start if any API route has no role check.
 - **Device passwords are never stored** – they are typed at push time and kept in memory for that job only.
 - **Audit log** is append-only with a hash chain, so edits or deletions are detectable.
+- **No CLI injection:** every text field in a plan uses a character allowlist (no newline, `;`, `|`,
+  `#`, `^`, `?`), so a hostname, description or banner can never start a second command. The final
+  command list is also checked against a denylist (`reload`, `erase`, `do rel`, …) and against
+  changes that would cut the management connection.
 
 Details: `CLAUDE.md` section 8, `docs/adr/`, `docs/SYSTEM_DESIGN.md`, `docs/TEST_PLAN.md`.
 
@@ -85,7 +89,7 @@ scripts/   Windows helper scripts
 | 1 | 1C catalog and device inventory | done |
 | 1 | 1D review | done |
 | 2 | 2A Cisco IOS research, 2B plan validation, Cisco driver, preview API, Configure wizard | done |
-| 2 | 2C review | next |
+| 2 | 2C review | done |
 | 3 | Safe push engine, console bootstrap, multi-device | – |
 | 4 | Multi-vendor drivers, live dashboard, UI polish | – |
 | 5 | AI assistant, hardening, docs, release | – |

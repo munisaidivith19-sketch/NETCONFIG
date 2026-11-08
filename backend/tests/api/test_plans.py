@@ -53,6 +53,11 @@ def test_schema_errors_are_422_with_fields(client_for):
     assert "plan.basic.hostname" in r.json()["error"]["fields"]
     r = eng.post(URL, json={"model_id": "cisco-c9300-24t", "plan": {}, "credentials": {"password": "x"}})
     assert r.status_code == 422
+    # A rejected secret is never echoed back.
+    bad = {"username": "netadmin", "password": "Leaky Secret#9"}
+    r = eng.post(URL, json={"model_id": "cisco-c9300-24t", "plan": {"ssh": bad}})
+    assert r.status_code == 422 and "plan.ssh.password" in r.json()["error"]["fields"]
+    assert "Leaky" not in r.text
 
 
 def test_unsupported_feature_listed(client_for):

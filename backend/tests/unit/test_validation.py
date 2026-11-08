@@ -172,6 +172,13 @@ def test_abbreviated_interface_accepted_and_expanded():
     assert p.access[0].interfaces == ["GigabitEthernet1/0/24"]
 
 
+def test_vlan_interface_only_on_switches():
+    router = ModelInfo.from_doc(MODELS["cisco-iosv"])
+    r = run({"interfaces": [{"interface": "Vlan10", "ip": "10.0.0.1/24"}]}, model=router)
+    assert "no VLAN interfaces" in r.errors["interfaces.0.interface"]
+    assert run({"interfaces": [{"interface": "Loopback0", "ip": "10.0.0.1/32"}]}, model=router).ok
+
+
 def test_port_used_twice():
     r = run({"access": [{"interfaces": ["Gi1/0/1"], "vlan": 10}],
              "trunks": [{"interface": "GigabitEthernet1/0/1", "allowed_vlans": [10]}]})
@@ -202,6 +209,7 @@ def test_ssh_needs_domain():
     ({"hardening": {"banner": "hi^Creload"}}, "hardening.banner"),
     ({"hardening": {"banner": "hi#\nreload"}}, "hardening.banner"),
     ({"hardening": {"banner": "x" * 241}}, "hardening.banner"),
+    ({"hardening": {"banner": "Who are you?"}}, "hardening.banner"),  # "?" opens IOS context help
     ({"svis": [{"vlan": 10, "ip": "10.0.10.1/24", "description": "a\rreload"}]}, "svis.0.description"),
     ({"svis": [{"vlan": 10, "ip": "1０.0.10.1/24"}]}, "svis.0.ip"),  # full-width digit
     ({"trunks": [{"interface": "Gi0/1\nreload", "allowed_vlans": [1]}]}, "trunks.0.interface"),
