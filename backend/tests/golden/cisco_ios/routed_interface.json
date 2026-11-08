@@ -1,0 +1,16 @@
+{
+  "model_id": "cisco-c9300-24t",
+  "plan": {
+    "interfaces": [
+      {
+        "interface": "Te1/1/1",
+        "ip": "10.255.0.1/30",
+        "description": "P2P to R1"
+      },
+      {
+        "interface": "Loopback0",
+        "ip": "10.255.255.1/32"
+      }
+    ]
+  }
+}

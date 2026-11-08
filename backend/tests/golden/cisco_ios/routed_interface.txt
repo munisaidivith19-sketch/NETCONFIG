@@ -1,0 +1,9 @@
+ip routing
+interface TenGigabitEthernet1/1/1
+ description P2P to R1
+ no switchport
+ ip address 10.255.0.1 255.255.255.252
+ no shutdown
+interface Loopback0
+ ip address 10.255.255.1 255.255.255.255
+ no shutdown

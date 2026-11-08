@@ -1,0 +1,33 @@
+{
+  "model_id": "cisco-iosv",
+  "plan": {
+    "interfaces": [
+      {
+        "interface": "Gi0/1",
+        "ip": "10.0.30.1/24"
+      }
+    ],
+    "dhcp": [
+      {
+        "name": "GUEST",
+        "network": "10.0.30.0/24",
+        "default_router": "10.0.30.1",
+        "dns_servers": [
+          "9.9.9.9",
+          "1.1.1.1"
+        ],
+        "domain": "guest.example.net",
+        "lease_days": 2,
+        "excluded": [
+          {
+            "start": "10.0.30.1",
+            "end": "10.0.30.20"
+          },
+          {
+            "start": "10.0.30.254"
+          }
+        ]
+      }
+    ]
+  }
+}

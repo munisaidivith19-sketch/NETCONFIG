@@ -51,6 +51,9 @@ Open http://127.0.0.1:8000 – FastAPI serves the built frontend. API docs (`/do
 cd backend;  .venv\Scripts\python -m pytest          # needs MongoDB running (uses database netconfig_test)
 cd frontend; npm test; npm run build
 ```
+Golden files: `UPDATE_GOLDEN=1 .venv\Scripts\python -m pytest tests/drivers` rewrites
+`tests/golden/<os_id>/*.txt`; review the diff before committing.
+
 Static checks: `ruff check .`, `bandit -c pyproject.toml -r app scripts`, `pip-audit -r requirements.txt`, `npm audit`.
 
 ## Security in one minute
@@ -81,7 +84,8 @@ scripts/   Windows helper scripts
 | 1 | 1B backend skeleton, security foundation, login UI | done |
 | 1 | 1C catalog and device inventory | done |
 | 1 | 1D review | done |
-| 2 | Configuration engine and Cisco IOS driver | next |
+| 2 | 2A Cisco IOS research, 2B plan validation, Cisco driver, preview API, Configure wizard | done |
+| 2 | 2C review | next |
 | 3 | Safe push engine, console bootstrap, multi-device | – |
 | 4 | Multi-vendor drivers, live dashboard, UI polish | – |
 | 5 | AI assistant, hardening, docs, release | – |

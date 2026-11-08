@@ -1,0 +1,17 @@
+vlan 10
+ name Sales
+interface GigabitEthernet1/0/1
+ description Sales desks
+ switchport mode access
+ switchport access vlan 10
+ no shutdown
+interface GigabitEthernet1/0/2
+ description Sales desks
+ switchport mode access
+ switchport access vlan 10
+ no shutdown
+interface GigabitEthernet1/0/3
+ description Sales desks
+ switchport mode access
+ switchport access vlan 10
+ no shutdown

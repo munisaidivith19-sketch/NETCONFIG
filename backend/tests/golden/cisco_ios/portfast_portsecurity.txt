@@ -1,0 +1,22 @@
+vlan 20
+ name Engineering
+interface GigabitEthernet1/0/5
+ description Eng desks
+ switchport mode access
+ switchport access vlan 20
+ switchport port-security
+ switchport port-security maximum 2
+ switchport port-security violation restrict
+ switchport port-security mac-address sticky
+ spanning-tree portfast
+ no shutdown
+interface GigabitEthernet1/0/6
+ description Eng desks
+ switchport mode access
+ switchport access vlan 20
+ switchport port-security
+ switchport port-security maximum 2
+ switchport port-security violation restrict
+ switchport port-security mac-address sticky
+ spanning-tree portfast
+ no shutdown

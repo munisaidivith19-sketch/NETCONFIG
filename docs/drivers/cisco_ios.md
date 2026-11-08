@@ -80,7 +80,8 @@ interface range <if-list>          ! or a single "interface <if>"
 - PortFast only on ports that connect to end hosts – never on links to other switches.
 - `interface range` takes comma-separated items, for example
   `interface range GigabitEthernet1/0/1 - 12 , GigabitEthernet1/0/20` **[LAB: spacing accepted by IOSvL2]**.
-  The driver emits one `interface` block per port when a range would mix modules.
+  Until that spacing is confirmed in the lab, the driver emits one `interface <if>` block per port
+  (longer, but every line is a documented command). `interface range` is a later optimisation.
 
 ### Port security (optional per access port group)
 ```
@@ -367,3 +368,13 @@ Source: [Using the Command-Line Interface, 15.2(2)E (Catalyst 2960-XR)](https://
 | `portfast_keyword` | `""` (plain `spanning-tree portfast`) | `"edge"` for models that require it |
 | `vty_lines` | `5` | `16` on Catalyst 2960-X / 9300 |
 | `archive_fs` | `flash:` | `flash0:` on IOSv / IOSvL2 **[LAB]** |
+
+## 19. Implementation notes (Phase 2B)
+- `app/drivers/cisco_ios.py` implements every section above; golden files are in `backend/tests/golden/cisco_ios/`.
+- Interface abbreviations (`gi1/0/1`, `te1/1/1`, `vl10`, `po1`) are expanded before validation; an ambiguous
+  abbreviation (`f0/1`, `t1/0/1`) is left as typed and fails the model's port pattern.
+- `crypto key generate rsa` is listed in the preview; the push engine (Phase 3A) sends it only when
+  `show crypto key mypubkey rsa` shows no key, or when the plan asks to replace the keys.
+- Verification reads `show running-config` for settings without a dedicated show command (hostname,
+  hardening, static routes, EIGRP networks, VTY lines). Neighbour/up-down state checks are informational
+  and do not fail a push on their own.

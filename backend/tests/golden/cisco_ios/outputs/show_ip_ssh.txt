@@ -1,0 +1,4 @@
+SSH Enabled - version 2.0
+Authentication methods:publickey,keyboard-interactive,password
+Authentication timeout: 120 secs; Authentication retries: 3
+Minimum expected Diffie Hellman key size : 2048 bits

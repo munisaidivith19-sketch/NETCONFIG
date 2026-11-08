@@ -1,0 +1,14 @@
+hostname core1
+ip domain name lab.example.net
+username netadmin privilege 15 secret ********
+enable secret ********
+crypto key generate rsa modulus 2048
+ip ssh version 2
+line vty 0 4
+ login local
+ transport input ssh
+ exec-timeout 15 0
+line vty 5 15
+ login local
+ transport input ssh
+ exec-timeout 15 0

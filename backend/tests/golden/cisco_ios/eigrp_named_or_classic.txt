@@ -1,0 +1,6 @@
+router eigrp 100
+ eigrp router-id 10.255.255.3
+ network 10.0.0.0 0.0.0.255
+ network 10.255.0.0 0.0.0.3
+ passive-interface GigabitEthernet0/1
+ no auto-summary

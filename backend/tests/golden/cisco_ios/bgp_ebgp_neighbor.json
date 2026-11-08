@@ -1,0 +1,27 @@
+{
+  "model_id": "cisco-isr4331",
+  "plan": {
+    "interfaces": [
+      {
+        "interface": "Gi0/0/0",
+        "ip": "203.0.113.2/30"
+      }
+    ],
+    "routing": {
+      "bgp": {
+        "asn": 65010,
+        "router_id": "10.255.255.4",
+        "neighbors": [
+          {
+            "ip": "203.0.113.1",
+            "remote_as": 64500,
+            "description": "ISP-A"
+          }
+        ],
+        "networks": [
+          "198.51.100.0/24"
+        ]
+      }
+    }
+  }
+}

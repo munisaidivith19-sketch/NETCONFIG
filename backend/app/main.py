@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import __version__, errors
 from .api import audit as audit_api
-from .api import auth, catalog, devices, health, users
+from .api import auth, catalog, devices, health, plans, users
 from .config import Settings
 from .db import connect, ensure_indexes
 from .errors import ApiError
@@ -21,7 +21,7 @@ from .services.catalog import seed_if_empty
 
 log = logging.getLogger("netconfig")
 
-ROUTERS = [health.router, auth.router, users.router, audit_api.router, catalog.router, devices.router]
+ROUTERS = [health.router, auth.router, users.router, audit_api.router, catalog.router, devices.router, plans.router]
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

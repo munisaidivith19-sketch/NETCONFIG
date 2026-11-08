@@ -1,0 +1,5 @@
+service password-encryption
+no ip http server
+no ip http secure-server
+login block-for 120 attempts 5 within 60
+banner motd #Authorised access only. Activity is logged.#

@@ -1,0 +1,12 @@
+vlan 10
+ name Sales
+vlan 20
+ name Engineering
+ip routing
+interface Vlan10
+ description Sales gateway
+ ip address 10.0.10.1 255.255.255.0
+ no shutdown
+interface Vlan20
+ ip address 10.0.20.1 255.255.255.0
+ no shutdown

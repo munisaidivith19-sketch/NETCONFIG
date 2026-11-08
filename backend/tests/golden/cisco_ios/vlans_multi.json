@@ -1,0 +1,23 @@
+{
+  "model_id": "cisco-iosvl2",
+  "plan": {
+    "vlans": [
+      {
+        "id": 10,
+        "name": "Sales"
+      },
+      {
+        "id": 20,
+        "name": "Engineering"
+      },
+      {
+        "id": 30,
+        "name": "Voice_IP"
+      },
+      {
+        "id": 99,
+        "name": "Mgmt-Net"
+      }
+    ]
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "model_id": "cisco-isr4331",
+  "plan": {
+    "interfaces": [
+      {
+        "interface": "Gi0/0/0",
+        "ip": "203.0.113.2/30",
+        "description": "ISP"
+      },
+      {
+        "interface": "Gi0/0/1",
+        "ip": "10.0.0.1/24",
+        "description": "LAN"
+      }
+    ],
+    "nat": {
+      "inside_interfaces": [
+        "Gi0/0/1"
+      ],
+      "outside_interface": "Gi0/0/0",
+      "inside_networks": [
+        "10.0.0.0/24"
+      ]
+    }
+  }
+}

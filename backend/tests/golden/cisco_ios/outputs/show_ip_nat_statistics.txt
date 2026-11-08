@@ -1,0 +1,10 @@
+Total active translations: 3 (0 static, 3 dynamic; 3 extended)
+Outside interfaces:
+  GigabitEthernet0/0/0
+Inside interfaces:
+  GigabitEthernet0/0/1
+Hits: 1203  Misses: 0
+Expired translations: 12
+Dynamic mappings:
+-- Inside Source
+[Id: 1] access-list NCS_NAT_INSIDE interface GigabitEthernet0/0/0 refcount 3

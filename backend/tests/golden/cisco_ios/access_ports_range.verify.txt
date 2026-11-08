@@ -1,0 +1,2 @@
+show vlan brief
+show interfaces status

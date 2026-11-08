@@ -3,6 +3,7 @@ import Layout from './components/Layout.jsx'
 import { RequireAuth } from './lib/auth.jsx'
 import Account from './pages/Account.jsx'
 import Catalog from './pages/Catalog.jsx'
+import Configure from './pages/Configure.jsx'
 import Devices from './pages/Devices.jsx'
 import Audit from './pages/admin/Audit.jsx'
 import Users from './pages/admin/Users.jsx'
@@ -27,7 +28,7 @@ export default function App() {
           path="configure"
           element={
             <RequireAuth role="engineer">
-              <Placeholder title="Configure" phase="Phase 2B" />
+              <Configure />
             </RequireAuth>
           }
         />

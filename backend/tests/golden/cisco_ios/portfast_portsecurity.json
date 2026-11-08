@@ -1,0 +1,27 @@
+{
+  "model_id": "cisco-ws-c2960x-24ts-l",
+  "plan": {
+    "vlans": [
+      {
+        "id": 20,
+        "name": "Engineering"
+      }
+    ],
+    "access": [
+      {
+        "interfaces": [
+          "GigabitEthernet1/0/5",
+          "gi1/0/6"
+        ],
+        "vlan": 20,
+        "description": "Eng desks",
+        "portfast": true,
+        "port_security": {
+          "maximum": 2,
+          "violation": "restrict",
+          "sticky": true
+        }
+      }
+    ]
+  }
+}

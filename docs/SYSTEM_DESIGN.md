@@ -224,6 +224,9 @@ memory while a job waits for approval**:
 5. Engineer → `POST /api/jobs/{id}/run` with credentials (`SecretStr`) → `queued`. Credentials are accepted
    **only** in this call, and only from status `ready`. They go straight into the in-memory vault
    `{job_id: Credentials}` and are deleted in a `finally:` block when the job reaches a terminal state.
+   The same applies to **plan secrets** (the password of a local user the plan creates, the enable
+   secret): the stored plan has them removed (`ConfigPlan.without_secrets()`), the preview shows
+   `********`, and the real values are supplied with the credentials in this call (Phase 2B decision).
 
 Status list (agreed, `CLAUDE.md` section 6): `awaiting_approval, ready, queued, connecting, backing_up,
 checking, applying, verifying, saving, rolling_back, success, failed, rolled_back, blocked, cancelled, expired`.
@@ -307,11 +310,11 @@ All routes are under `/api`. JSON only. Auth is the session cookie. State-changi
 | POST | `/devices` | E | |
 | GET/PATCH | `/devices/{id}` | V / E | |
 | DELETE | `/devices/{id}` | A | |
-| POST | `/plans/preview` | E | `{errors}` or `{commands(masked), warnings, unsupported}` |
+| POST | `/plans/preview` | E | `{device_id or model_id, plan}` → 200 `{ok, errors, warnings, unsupported, commands(masked), verify_commands, commands_hash, rollback, save_command}`; schema errors (types, characters, sizes) → 422 with `fields` |
 | POST | `/jobs` | E | create (no credentials) → `awaiting_approval` or `ready` |
 | POST | `/jobs/{id}/approve` | A | approver ≠ requester; binds to `plan_hash` |
 | POST | `/jobs/{id}/reject` | A | |
-| POST | `/jobs/{id}/run` | E | credentials in body → `queued` |
+| POST | `/jobs/{id}/run` | E | device login + plan secrets (new local user password, enable secret) in body → `queued` |
 | POST | `/jobs/{id}/cancel` | E | only before `applying` |
 | GET | `/jobs?status=&device_id=&page=` | V | history |
 | GET | `/jobs/{id}` | V | progress + masked outputs |

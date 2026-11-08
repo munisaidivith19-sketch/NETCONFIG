@@ -1,0 +1,9 @@
+show running-config
+show ip ssh
+show vlan brief
+show interfaces status
+show interfaces TenGigabitEthernet1/1/1 switchport
+show ip interface brief
+show ip dhcp pool
+show ip ospf interface brief
+show ip ospf neighbor

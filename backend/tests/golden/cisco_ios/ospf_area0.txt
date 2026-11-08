@@ -1,0 +1,15 @@
+interface GigabitEthernet0/0
+ ip address 10.255.0.2 255.255.255.252
+ no shutdown
+interface GigabitEthernet0/1
+ ip address 10.0.40.1 255.255.255.0
+ no shutdown
+interface Loopback0
+ ip address 10.255.255.2 255.255.255.255
+ no shutdown
+router ospf 1
+ router-id 10.255.255.2
+ network 10.255.0.2 0.0.0.0 area 0
+ network 10.0.40.1 0.0.0.0 area 0
+ network 10.255.255.2 0.0.0.0 area 0
+ passive-interface GigabitEthernet0/1
