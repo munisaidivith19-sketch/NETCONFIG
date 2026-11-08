@@ -10,17 +10,18 @@ from fastapi.staticfiles import StaticFiles
 
 from . import __version__, errors
 from .api import audit as audit_api
-from .api import auth, health, users
+from .api import auth, catalog, devices, health, users
 from .config import Settings
 from .db import connect, ensure_indexes
 from .errors import ApiError
 from .security.guard import LocalhostGuard
 from .security.ratelimit import RateLimiter
 from .security.rbac import assert_all_routes_protected
+from .services.catalog import seed_if_empty
 
 log = logging.getLogger("netconfig")
 
-ROUTERS = [health.router, auth.router, users.router, audit_api.router]
+ROUTERS = [health.router, auth.router, users.router, audit_api.router, catalog.router, devices.router]
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -31,6 +32,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI):
         try:
             ensure_indexes(app.state.db)
+            seed_if_empty(app.state.db)
         except Exception as exc:  # noqa: BLE001 - app still starts; /api/health reports "down"
             log.warning("MongoDB not available at startup (%s); /api/health will report it.", type(exc).__name__)
         if settings.allow_remote:

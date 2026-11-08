@@ -23,6 +23,16 @@ EXPECTED_ROLES = {
     ("DELETE", "/api/users/{user_id}"): "admin",
     ("GET", "/api/audit"): "admin",
     ("GET", "/api/audit/verify"): "admin",
+    ("GET", "/api/catalog/os-drivers"): "viewer",
+    ("GET", "/api/catalog/brands"): "viewer",
+    ("GET", "/api/catalog/series"): "viewer",
+    ("GET", "/api/catalog/models"): "viewer",
+    ("GET", "/api/catalog/models/{model_id}"): "viewer",
+    ("GET", "/api/devices"): "viewer",
+    ("POST", "/api/devices"): "engineer",
+    ("GET", "/api/devices/{device_id}"): "viewer",
+    ("PATCH", "/api/devices/{device_id}"): "engineer",
+    ("DELETE", "/api/devices/{device_id}"): "admin",
 }
 
 
@@ -58,7 +68,7 @@ def test_nested_router_fails_closed():
 
 
 def _call(client, method, path):
-    path = path.replace("{user_id}", "0" * 24)
+    path = path.replace("{user_id}", "0" * 24).replace("{device_id}", "0" * 24).replace("{model_id}", "none")
     return client.request(method, path, json={} if method in ("POST", "PATCH") else None)
 
 

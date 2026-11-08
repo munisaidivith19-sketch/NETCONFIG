@@ -2,6 +2,8 @@ import { Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout.jsx'
 import { RequireAuth } from './lib/auth.jsx'
 import Account from './pages/Account.jsx'
+import Catalog from './pages/Catalog.jsx'
+import Devices from './pages/Devices.jsx'
 import Audit from './pages/admin/Audit.jsx'
 import Users from './pages/admin/Users.jsx'
 import Login from './pages/Login.jsx'
@@ -19,8 +21,8 @@ export default function App() {
         }
       >
         <Route index element={<Placeholder title="Overview" phase="Phase 4B" />} />
-        <Route path="devices" element={<Placeholder title="Devices" phase="Phase 1C" />} />
-        <Route path="catalog" element={<Placeholder title="Catalog" phase="Phase 1C" />} />
+        <Route path="devices" element={<Devices />} />
+        <Route path="catalog" element={<Catalog />} />
         <Route
           path="configure"
           element={
