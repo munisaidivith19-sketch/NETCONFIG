@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Boxes, CheckCircle2, Circle, ClipboardCheck, Copy, KeyRound, Server, ShieldCheck } from 'lucide-react'
+import { Boxes, CheckCircle2, ClipboardCheck, History, KeyRound, Send, Server, ShieldCheck } from 'lucide-react'
+import CodeBlock from '../components/CodeBlock.jsx'
+import JobView from '../components/JobView.jsx'
 import PlanForm from '../components/PlanForm.jsx'
-import { Alert, Badge, Empty, ErrorNote, PageHeader, Panel, SkeletonRows } from '../components/ui.jsx'
+import { Alert, Badge, Empty, ErrorNote, Field, PageHeader, Panel, SkeletonRows } from '../components/ui.jsx'
 import { get, post } from '../lib/api.js'
+import { NOTE_HINT, NOTE_PATTERN } from '../lib/jobs.js'
+import { useJob } from '../lib/useJob.js'
 import { SUPPORT, categoryIcon, categoryLabel } from '../lib/labels.js'
 import { emptyForm, normalizeErrors, sectionOf, toPlan } from '../lib/plan.js'
 
 const STEPS = ['Device', 'Requirements', 'Preview', 'Approval', 'Push & verify']
-const PUSH_STEPS = ['Connect', 'Back up running config', 'Pre-checks', 'Apply with rollback timer', 'Verify', 'Confirm and save']
 
 function Steps({ step, setStep, allowed }) {
   return (
@@ -108,34 +111,6 @@ function DeviceStep({ target, setTarget }) {
   )
 }
 
-function CodeBlock({ lines, label }) {
-  const [copied, setCopied] = useState(false)
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(lines.join('\n'))
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    } catch {
-      setCopied(false)
-    }
-  }
-  return (
-    <div className="stack">
-      <div className="row between">
-        <strong>{label}</strong>
-        <button type="button" className="btn small ghost" onClick={copy}>
-          <Copy size={16} aria-hidden="true" /> {copied ? 'Copied' : 'Copy'}
-        </button>
-      </div>
-      <pre className="code" aria-label={label} tabIndex={0}>
-        {lines.map((l, i) => (
-          <span className="line" key={i}>{l || ' '}</span>
-        ))}
-      </pre>
-    </div>
-  )
-}
-
 function PreviewStep({ preview, error, loading, onRetry, goFix }) {
   if (loading) return <Panel title="Preview"><SkeletonRows rows={6} /></Panel>
   if (error) return <Panel title="Preview"><ErrorNote error={error} /><button type="button" className="btn" onClick={onRetry}>Try again</button></Panel>
@@ -186,32 +161,44 @@ function PreviewStep({ preview, error, loading, onRetry, goFix }) {
   )
 }
 
-function ApprovalStep({ target }) {
+function CreateJob({ target, plan, onCreated }) {
+  const [note, setNote] = useState('')
+  const [error, setError] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const badNote = !NOTE_PATTERN.test(note)
+
+  async function create() {
+    setBusy(true)
+    setError(null)
+    try {
+      onCreated(await post('/jobs', { device_id: target.id, plan, note }))
+    } catch (err) {
+      setError(err)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
-    <Panel title="Approval and credentials">
+    <Panel title="Create the push job" subtitle="The job freezes these exact commands. Credentials are asked for only when it runs.">
       <div className="stack">
         {target.production ? (
-          <Alert tone="warning" title="Production device.">A second user (an admin) must approve this change. The request expires after 24 hours.</Alert>
+          <Alert tone="warning" title="Production device.">
+            A second user (an admin) must approve this change before it can run. The request expires after 24 hours.
+          </Alert>
         ) : (
-          <Alert tone="info">This device is not tagged production, so no second approval is needed.</Alert>
+          <Alert tone="info">This device is not tagged production, so no second approval is needed: you can run it next.</Alert>
         )}
-        <Alert tone="info" title="Coming in Phase 3A.">
-          The push engine is not built yet. Here you will enter the device login (and the new local user's
-          password) only after approval. They are kept in memory for that one job and never stored.
-        </Alert>
+        <Field label="Change note (optional)" hint="Why this change? Shown in History and to the approver." error={badNote ? NOTE_HINT : null}>
+          {(props) => <input {...props} className="input" value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} />}
+        </Field>
+        <ErrorNote error={error} />
+        <div className="form-actions">
+          <button type="button" className="btn primary" disabled={busy || badNote} onClick={create}>
+            <Send size={18} aria-hidden="true" /> {busy ? 'Creating…' : target.production ? 'Request approval' : 'Create job'}
+          </button>
+        </div>
       </div>
-    </Panel>
-  )
-}
-
-function PushStep() {
-  return (
-    <Panel title="Push and verify" subtitle="Available in Phase 3A.">
-      <ul className="progress-list">
-        {PUSH_STEPS.map((s) => (
-          <li key={s} className="pending"><Circle size={18} aria-hidden="true" /> {s}</li>
-        ))}
-      </ul>
     </Panel>
   )
 }
@@ -225,6 +212,14 @@ export default function Configure() {
   const [preview, setPreview] = useState(null)
   const [previewError, setPreviewError] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [jobId, setJobId] = useState(null)
+  const { job, setJob } = useJob(jobId)
+  const started = Boolean(job?.steps?.[0]?.timeline?.some((t) => t.state === 'queued'))
+
+  // Once the run starts, move on to the live progress step.
+  useEffect(() => {
+    if (started) setStep(4)
+  }, [started])
 
   // /configure?device=<id> preselects a device (link from the Devices page).
   const wanted = params.get('device')
@@ -244,14 +239,21 @@ export default function Configure() {
     return ex.length ? `Ports on this model look like ${ex.slice(0, 2).join(', ')}; short names such as Gi1/0/1 work too.` : ''
   }, [target])
 
+  function resetJob() {
+    setJobId(null)
+    setJob(null)
+  }
+
   function chooseTarget(t) {
     setTarget(t)
+    resetJob()
     setPreview(null)
     setErrors({})
     setStep(1)
   }
 
   async function runPreview() {
+    if (job && started) resetJob() // starting a new change after a finished push
     setStep(2)
     setLoading(true)
     setPreviewError(null)
@@ -276,15 +278,17 @@ export default function Configure() {
 
   function goFix(path) {
     setStep(1)
-    requestAnimationFrame(() => document.getElementById(`sec-${sectionOf(path)}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+    requestAnimationFrame(() => document.getElementById(`sec-${sectionOf(path)}`)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }))
   }
 
   const updateForm = (fn) => {
     setForm(fn)
     if (preview?.ok) setPreview(null) // the preview no longer matches the form
+    if (job && !started) resetJob() // a job not yet run belongs to the old plan; History still has it
   }
 
-  const allowed = (i) => i === 0 || (i <= 2 && Boolean(target)) || (i >= 3 && Boolean(preview?.ok) && target?.kind === 'device')
+  const allowed = (i) =>
+    i === 0 || (i <= 2 && Boolean(target)) || (i === 3 && Boolean(preview?.ok) && target?.kind === 'device') || (i === 4 && started)
 
   return (
     <>
@@ -332,8 +336,20 @@ export default function Configure() {
           </>
         )}
 
-        {step === 3 && target && <ApprovalStep target={target} />}
-        {step === 4 && <PushStep />}
+        {step === 3 && target && (job ? (
+          <JobView job={job} setJob={setJob} />
+        ) : (
+          <CreateJob target={target} plan={toPlan(form)} onCreated={(j) => { setJob(j); setJobId(j.id) }} />
+        ))}
+        {step === 4 && job && (
+          <>
+            <JobView job={job} setJob={setJob} />
+            <div className="form-actions">
+              <Link className="btn" to={`/history/${job.id}`}><History size={18} aria-hidden="true" /> Open in History</Link>
+              <button type="button" className="btn primary" onClick={() => { resetJob(); setPreview(null); setStep(1) }}>New change for this device</button>
+            </div>
+          </>
+        )}
       </div>
     </>
   )

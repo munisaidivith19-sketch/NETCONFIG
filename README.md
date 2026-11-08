@@ -46,6 +46,34 @@ $env:ENV="production"; .venv\Scripts\python -m app
 ```
 Open http://127.0.0.1:8000 – FastAPI serves the built frontend. API docs (`/docs`) are off in production.
 
+## Try a push without a device (simulation mode)
+For demos and UI work only. Pushes go to an in-memory pretend Cisco switch, not the network, and a
+yellow banner says so on every page. It is refused when `ENV=production`.
+```powershell
+cd backend
+$env:SIMULATE_DEVICES="true"; .venv\Scripts\python -m app
+```
+Add a device (for example model *Cisco IOSvL2*, management IP `10.0.0.2`), then Configure → Preview →
+Create job → enter any username and password (the password `wrong` simulates a login failure) → Run.
+Real testing uses GNS3 / CML (`docs/LAB_TESTING.md`, Phase 3B).
+
+## How a push works
+1. **Create job** (Configure step 4): the exact commands are frozen with a SHA-256 hash. No credentials.
+2. **Approval** (only devices tagged `production`): a *different* admin approves in History within 24 hours.
+3. **Run**: the device login (and the password of a local user the plan creates) is typed now, sent once,
+   kept in memory for this job only and wiped when it ends. The commands are regenerated and must match
+   the approved hash.
+4. **Push engine**: connect (SSH host key checked) → back up `show running-config` → find the interface
+   that holds the management IP → denylist + management checks → apply inside
+   `configure terminal revert timer N` → stop at the first CLI error → verify with `show` commands →
+   `configure confirm` → `write memory`. Any error after applying → `configure revert now`; if the device
+   is unreachable, its own timer restores the old config.
+5. **History** shows the timeline, checks, the masked transcript and the masked backup.
+
+The Cisco IOS driver is still **experimental** (not proven on an emulator yet). Lab devices can be pushed;
+devices tagged `production` additionally need `ENABLE_EXPERIMENTAL_DRIVERS=true` until the driver is
+marked `tested` (Phase 3B lab tests).
+
 ## Tests
 ```powershell
 cd backend;  .venv\Scripts\python -m pytest          # needs MongoDB running (uses database netconfig_test)
@@ -65,6 +93,9 @@ Static checks: `ruff check .`, `bandit -c pyproject.toml -r app scripts`, `pip-a
   lockout after 5 failures for 15 minutes, server-side sessions (8 h absolute, 30 min idle).
 - **Deny by default:** the app refuses to start if any API route has no role check.
 - **Device passwords are never stored** – they are typed at push time and kept in memory for that job only.
+- **SSH host keys are pinned** on first connection. If a device later offers a different key, the push stops
+  before the password is sent, until an admin compares and accepts the new fingerprint (Admin → SSH host keys).
+- **Two-person rule** for `production` devices, and **automatic rollback** (Cisco revert timer).
 - **Audit log** is append-only with a hash chain, so edits or deletions are detectable.
 - **No CLI injection:** every text field in a plan uses a character allowlist (no newline, `;`, `|`,
   `#`, `^`, `?`), so a hostname, description or banner can never start a second command. The final
@@ -90,6 +121,8 @@ scripts/   Windows helper scripts
 | 1 | 1D review | done |
 | 2 | 2A Cisco IOS research, 2B plan validation, Cisco driver, preview API, Configure wizard | done |
 | 2 | 2C review | done |
-| 3 | Safe push engine, console bootstrap, multi-device | – |
+| 3 | 3A safe push engine, approvals, live progress, History, SSH host keys | done |
+| 3 | 3B console bootstrap, router link wizard, multi-device, templates | – |
+| 3 | 3C review | – |
 | 4 | Multi-vendor drivers, live dashboard, UI polish | – |
 | 5 | AI assistant, hardening, docs, release | – |

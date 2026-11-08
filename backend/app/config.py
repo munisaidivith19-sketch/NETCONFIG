@@ -37,6 +37,8 @@ class Settings(BaseSettings):
 
     max_body_bytes: int = 1_000_000
     enable_experimental_drivers: bool = False
+    # Development only: pushes go to an in-memory simulated device instead of the network (demo / tests).
+    simulate_devices: bool = False
     frontend_dist: Path = BACKEND_DIR.parent / "frontend" / "dist"
 
     @property
@@ -57,6 +59,10 @@ class Settings(BaseSettings):
         if not self.is_production:
             origins.add(self.dev_origin)
         return origins
+
+    def check_simulation(self) -> None:
+        if self.simulate_devices and self.is_production:
+            raise RuntimeError("SIMULATE_DEVICES=true is not allowed with ENV=production.")
 
     def check_bind_address(self) -> None:
         """Refuse to listen beyond localhost unless ALLOW_REMOTE is set (CLAUDE.md 8.1)."""

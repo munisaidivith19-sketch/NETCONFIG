@@ -378,3 +378,17 @@ Source: [Using the Command-Line Interface, 15.2(2)E (Catalyst 2960-XR)](https://
 - Verification reads `show running-config` for settings without a dedicated show command (hostname,
   hardening, static routes, EIGRP networks, VTY lines). Neighbour/up-down state checks are informational
   and do not fail a push on their own.
+
+## 20. Push notes (Phase 3A)
+- Session: Netmiko `cisco_ios` (`cisco_ios_telnet` for lab consoles, `cisco_ios_serial` for a console cable),
+  `session_log=None`, `fast_cli=False`. Config lines are sent one at a time so the first error pattern
+  (section 17) stops the push at the exact command.
+- The `archive` block (`path <fs>ncs-archive`, `maximum 5`) is added in a separate `configure terminal`
+  session only when `show running-config` has no `archive` / `path`. The change itself is applied inside
+  `configure terminal revert timer N` (N = plan `revert_minutes`, default 10). After verification:
+  `configure confirm`, then `write memory`. On failure: `configure revert now`.
+- `crypto key generate rsa modulus N` asks "Do you really want to replace them? [yes/no]" when keys exist.
+  It is only sent when `show crypto key mypubkey rsa` shows no key or the plan sets `regenerate_keys`;
+  the prompt is then answered `yes` (Netmiko `send_command` with `expect_string`).
+- Still **experimental**: none of this has been run on IOSv / IOSvL2 yet. The checklist is in
+  `docs/LAB_TESTING.md` (Phase 3B); only after it passes is the driver marked `tested`.

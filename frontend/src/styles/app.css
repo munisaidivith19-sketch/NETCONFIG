@@ -494,6 +494,20 @@ tr.clickable:hover td, tr.selected td { background: var(--neutral-soft); }
 .progress-list li.done svg { color: var(--success); }
 .progress-list li.failed svg { color: var(--danger-strong); }
 .progress-list li.pending { color: var(--text-faint); }
+.progress-list li.failed { background: var(--danger-soft); }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.text-danger { color: var(--danger-strong); font-weight: var(--weight-semibold); }
+
+/* ---------- Jobs ---------- */
+
+fieldset.section-card { margin: 0; min-width: 0; }
+fieldset.section-card legend { display: inline-flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-2); font-weight: var(--weight-semibold); }
+details > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: var(--text-muted); font-weight: var(--weight-medium); }
+details > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm); }
+details[open] > summary { margin-bottom: var(--space-3); }
+.fingerprint { font-family: var(--font-mono); font-size: var(--text-sm); word-break: break-all; }
+.sim-banner { margin-bottom: var(--space-4); }
 
 /* ---------- Dialog / menu ---------- */
 

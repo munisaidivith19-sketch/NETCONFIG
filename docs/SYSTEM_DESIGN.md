@@ -284,6 +284,33 @@ rolled back as well (two-sided link consistency).
 - **Crash recovery:** at startup, any job left in a non-terminal running state is marked `failed` with
   "interrupted – verify device state". On Cisco and Junos the device has already reverted by itself (§5.3).
 
+### 5.6 Implementation notes (Phase 3A)
+- **Code:** `services/jobs.py` (approval, vault, `JobRunner`), `services/push.py` (`PushEngine`, one device),
+  `services/connection.py` (Netmiko wrapper), `services/hostkeys.py` (pinning), `services/simulator.py`.
+- **Approval binding:** `/run` regenerates the commands from the stored plan plus the run-time secrets and
+  refuses (409) if `commands_hash` differs from the one created/approved (device, model or catalog changed).
+  It also refuses if a lab device became `production` after the job was created.
+- **Experimental drivers (decision a):** a lab device can be pushed with an experimental driver (that is how
+  a driver gets lab-tested). A device tagged `production` with an experimental driver is refused at
+  `POST /jobs` unless `ENABLE_EXPERIMENTAL_DRIVERS=true`. Cisco IOS stays experimental until the
+  lab tests in `docs/LAB_TESTING.md` pass.
+- **SSH host keys (trust on first use):** before Netmiko logs in, a paramiko transport reads the key the
+  device offers. First time → stored (`hostkey.first_seen`). Same key → used. Different key → the job fails,
+  the new key is saved as `pending` (`hostkey.changed`), and nothing else happens until an admin accepts it.
+  Netmiko is then started with `ssh_strict=True` and a temporary known_hosts file that holds **only** the
+  pinned key, so even a key swap between the probe and the login fails during the handshake, before the
+  password is sent.
+- **Telnet** (`telnet_lab`) only to loopback/RFC 1918 addresses and noted as INSECURE in the job.
+- **Connect retry:** one retry after 3 s for timeouts only; login failures are never retried (AAA lockout).
+- **Simulation mode** (`SIMULATE_DEVICES=true`, refused with `ENV=production`): the runner uses an in-memory
+  device that keeps a running config and answers the `show` commands the Cisco driver parses. Every job
+  gets a "SIMULATION" note and the UI shows a banner (`/health.simulation`). It accepts every command, so it
+  proves the app flow, not the device commands.
+- **Frontend:** Configure step 4 creates the job and shows approval / the credentials form; step 5 polls
+  `GET /jobs/{id}` every second while running (5 s while waiting for a person) and shows the timeline,
+  checks, notes, masked transcript and backup. History lists jobs and opens the same view; admins approve or
+  reject there. Credentials live only in the form's React state, are sent once, then cleared.
+
 ---
 
 ## 6. API surface
@@ -294,7 +321,7 @@ All routes are under `/api`. JSON only. Auth is the session cookie. State-changi
 
 | Method | Path | Role | Notes |
 |---|---|---|---|
-| GET | `/health` | public | `{version, mongo: "ok"|"down"}` |
+| GET | `/health` | public | `{version, mongo: "ok"|"down", simulation: bool}` |
 | POST | `/auth/login` | public | rate-limited; lockout 5 / 15 min; sets cookie |
 | POST | `/auth/logout` | V | deletes the session |
 | GET | `/auth/me` | V | current user and role |
@@ -321,6 +348,7 @@ All routes are under `/api`. JSON only. Auth is the session cookie. State-changi
 | GET/POST | `/templates`, PATCH/DELETE `/templates/{id}` | V / E | |
 | GET | `/hostkeys?pending=true` | A | |
 | POST | `/hostkeys/{id}/accept` | A | accepts a changed key (audited) |
+| DELETE | `/hostkeys/{id}` | A | forget a key; the next connection pins whatever it is offered (audited) |
 | GET | `/audit?action=&user=&from=&to=&page=` | A | |
 | GET | `/status/overview` | V | Phase 4 KPIs |
 | POST | `/ai/draft`, `/ai/explain` | E | Phase 5, optional |

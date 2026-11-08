@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   BookOpen,
+  FlaskConical,
   History,
   KeyRound,
   LayoutDashboard,
@@ -14,6 +15,7 @@ import {
   Sun,
   Users,
 } from 'lucide-react'
+import { get } from '../lib/api.js'
 import { useAuth } from '../lib/auth.jsx'
 import { applyTheme, preferredTheme } from '../lib/theme.js'
 
@@ -160,6 +162,7 @@ export default function Layout() {
           <div className="row between mobile-only-bar">
             <MobileBar />
           </div>
+          <SimulationBanner />
           <Outlet />
         </main>
       </div>
@@ -173,6 +176,24 @@ export default function Layout() {
         ))}
       </nav>
     </>
+  )
+}
+
+/** SIMULATE_DEVICES=true (development only): make it impossible to mistake a simulated push for a real one. */
+function SimulationBanner() {
+  const [on, setOn] = useState(false)
+  useEffect(() => {
+    get('/health').then((h) => setOn(Boolean(h?.simulation))).catch(() => setOn(false))
+  }, [])
+  if (!on) return null
+  return (
+    <div className="alert warning sim-banner" role="status">
+      <FlaskConical size={18} aria-hidden="true" />
+      <div>
+        <strong>Simulation mode. </strong>
+        Pushes go to in-memory simulated devices, not the network. Restart without SIMULATE_DEVICES for real pushes.
+      </div>
+    </div>
   )
 }
 
