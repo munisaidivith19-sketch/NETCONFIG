@@ -463,7 +463,11 @@
       ],
       "capabilities_exclude": [],
       "source": "sample",
-      "verified": false
+      "verified": false,
+      "driver_flags": {
+        "trunk_encapsulation_cmd": true,
+        "archive_fs": "flash0:"
+      }
     },
     {
       "_id": "cisco-iosv",
@@ -489,7 +493,10 @@
         "svi"
       ],
       "source": "sample",
-      "verified": false
+      "verified": false,
+      "driver_flags": {
+        "archive_fs": "flash0:"
+      }
     },
     {
       "_id": "cisco-ws-c2960x-24ts-l",
@@ -517,7 +524,10 @@
         "bgp"
       ],
       "source": "sample",
-      "verified": false
+      "verified": false,
+      "driver_flags": {
+        "vty_lines": 16
+      }
     },
     {
       "_id": "cisco-ws-c2960x-48fps-l",
@@ -545,7 +555,10 @@
         "bgp"
       ],
       "source": "sample",
-      "verified": false
+      "verified": false,
+      "driver_flags": {
+        "vty_lines": 16
+      }
     },
     {
       "_id": "cisco-c9300-24t",
@@ -566,7 +579,10 @@
       ],
       "capabilities_exclude": [],
       "source": "sample",
-      "verified": false
+      "verified": false,
+      "driver_flags": {
+        "vty_lines": 16
+      }
     },
     {
       "_id": "cisco-c9300-48p",
@@ -587,7 +603,10 @@
       ],
       "capabilities_exclude": [],
       "source": "sample",
-      "verified": false
+      "verified": false,
+      "driver_flags": {
+        "vty_lines": 16
+      }
     },
     {
       "_id": "cisco-isr4321",
@@ -613,7 +632,8 @@
         "svi"
       ],
       "source": "sample",
-      "verified": false
+      "verified": false,
+      "driver_flags": {}
     },
     {
       "_id": "cisco-isr4331",
@@ -639,7 +659,8 @@
         "svi"
       ],
       "source": "sample",
-      "verified": false
+      "verified": false,
+      "driver_flags": {}
     },
     {
       "_id": "cisco-c9120axi",
@@ -657,7 +678,8 @@
       "port_examples": [],
       "capabilities_exclude": [],
       "source": "sample",
-      "verified": false
+      "verified": false,
+      "driver_flags": {}
     },
     {
       "_id": "arista-ceos-lab",
@@ -678,7 +700,8 @@
       ],
       "capabilities_exclude": [],
       "source": "sample",
-      "verified": false
+      "verified": false,
+      "driver_flags": {}
     },
     {
       "_id": "arista-dcs-720xp-24y6",
@@ -699,7 +722,8 @@
       ],
       "capabilities_exclude": [],
       "source": "sample",
-      "verified": false
+      "verified": false,
+      "driver_flags": {}
     },
     {
       "_id": "juniper-vjunos-switch",
@@ -720,7 +744,8 @@
       ],
       "capabilities_exclude": [],
       "source": "sample",
-      "verified": false
+      "verified": false,
+      "driver_flags": {}
     },
     {
       "_id": "juniper-ex2300-24t",
@@ -744,7 +769,8 @@
         "bgp"
       ],
       "source": "sample",
-      "verified": false
+      "verified": false,
+      "driver_flags": {}
     },
     {
       "_id": "juniper-srx300",
@@ -765,7 +791,8 @@
       ],
       "capabilities_exclude": [],
       "source": "sample",
-      "verified": false
+      "verified": false,
+      "driver_flags": {}
     },
     {
       "_id": "aruba-cx-simulator",
@@ -786,7 +813,8 @@
       ],
       "capabilities_exclude": [],
       "source": "sample",
-      "verified": false
+      "verified": false,
+      "driver_flags": {}
     },
     {
       "_id": "aruba-cx6100-24g",
@@ -812,7 +840,8 @@
         "bgp"
       ],
       "source": "sample",
-      "verified": false
+      "verified": false,
+      "driver_flags": {}
     },
     {
       "_id": "aruba-cx6300m-48g",
@@ -833,7 +862,8 @@
       ],
       "capabilities_exclude": [],
       "source": "sample",
-      "verified": false
+      "verified": false,
+      "driver_flags": {}
     },
     {
       "_id": "mikrotik-crs326-24g-2s",
@@ -854,7 +884,8 @@
       ],
       "capabilities_exclude": [],
       "source": "sample",
-      "verified": false
+      "verified": false,
+      "driver_flags": {}
     },
     {
       "_id": "mikrotik-chr",
@@ -875,7 +906,8 @@
       ],
       "capabilities_exclude": [],
       "source": "sample",
-      "verified": false
+      "verified": false,
+      "driver_flags": {}
     },
     {
       "_id": "huawei-s5735-l24t4s-a",
@@ -896,7 +928,8 @@
       ],
       "capabilities_exclude": [],
       "source": "sample",
-      "verified": false
+      "verified": false,
+      "driver_flags": {}
     },
     {
       "_id": "dlink-dgs-1210-28",
@@ -917,7 +950,8 @@
       ],
       "capabilities_exclude": [],
       "source": "sample",
-      "verified": false
+      "verified": false,
+      "driver_flags": {}
     },
     {
       "_id": "tplink-tl-sg2210p",
@@ -938,7 +972,8 @@
       ],
       "capabilities_exclude": [],
       "source": "sample",
-      "verified": false
+      "verified": false,
+      "driver_flags": {}
     },
     {
       "_id": "tplink-tl-sg1016d",
@@ -956,7 +991,8 @@
       "port_examples": [],
       "capabilities_exclude": [],
       "source": "sample",
-      "verified": false
+      "verified": false,
+      "driver_flags": {}
     },
     {
       "_id": "ubiquiti-u6-pro",
@@ -974,7 +1010,8 @@
       "port_examples": [],
       "capabilities_exclude": [],
       "source": "sample",
-      "verified": false
+      "verified": false,
+      "driver_flags": {}
     },
     {
       "_id": "axis-p3245-v",
@@ -992,7 +1029,8 @@
       "port_examples": [],
       "capabilities_exclude": [],
       "source": "sample",
-      "verified": false
+      "verified": false,
+      "driver_flags": {}
     }
   ]
 }
