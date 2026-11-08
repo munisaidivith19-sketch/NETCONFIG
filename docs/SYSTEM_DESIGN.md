@@ -36,7 +36,7 @@ not change it. The open decisions from the draft were approved by the author on 
 - Python 3.12, FastAPI, Pydantic v2, sync PyMongo, Netmiko (synchronous), React + Vite.
 - MongoDB Community Server runs locally as a Windows service (`mongodb://127.0.0.1:27017/netconfig`).
 - Single process, single machine. No message broker and no Redis, so job state is held in-process plus in MongoDB.
-- The existing `frontend/` is copied in by the author and kept (see §9).
+- The frontend is rebuilt in this project (see §9).
 
 ---
 
@@ -352,9 +352,9 @@ gets `400` / `403` with no body detail.
 | Approval vs credentials | Credentials supplied after approval | Hold creds during approval | Never keeps secrets in memory for hours |
 
 ## 9. Frontend
-The existing `frontend/` (liquid-glass design) is copied in by the author. It is **not rebuilt**.
-Before Phase 1B it must pass `npm run build`. Phase 1B then adds the login page, the 401 handling and
-the API client to it, keeping `src/styles/tokens.css` and `app.css`.
+The original frontend was not available, so the author asked for it to be rebuilt (2026-11-08). It is a
+Vite + React + React Router app in the liquid-glass design (`src/styles/tokens.css`, `app.css`), built
+page by page alongside the backend phases. It always talks to the API through `src/lib/api.js`.
 
 ## 10. What to revisit as the system grows
 - Multi-user or remote use (`ALLOW_REMOTE`) → TLS, a real reverse proxy, and possibly an external job queue.

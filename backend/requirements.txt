@@ -1,0 +1,18 @@
+# Runtime (pinned – CLAUDE.md 8.7). Works on Python 3.10 and 3.12.
+fastapi==0.162.2
+starlette==1.7.0
+uvicorn[standard]==0.54.0
+pydantic==2.14.3
+pydantic-settings==2.15.0
+pymongo==4.18.3
+netmiko==4.8.0
+paramiko==5.1.0
+pyserial==3.5
+bcrypt==5.0.0
+
+# Development and security tooling
+pytest==9.0.3  # 9.2.0 crashes at collection on Python 3.10
+httpx==0.28.1
+ruff==0.17.4
+bandit==1.9.4
+pip-audit==2.10.1

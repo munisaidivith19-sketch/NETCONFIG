@@ -1,0 +1,155 @@
+/* NetConfig Studio design tokens – "liquid glass".
+   Components use these variables only, never raw colours. */
+
+:root {
+  color-scheme: light;
+
+  /* Typography */
+  --font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'Cascadia Code', Consolas, monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-md: 0.9375rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --weight-regular: 430;
+  --weight-medium: 540;
+  --weight-semibold: 620;
+  --weight-bold: 700;
+  --leading: 1.5;
+
+  /* Spacing scale (4 px base) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* Radii (18–32 px for panels) */
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --radius-2xl: 32px;
+  --radius-pill: 999px;
+
+  --touch: 44px;
+  --sidebar-width: 248px;
+  --bottom-nav-height: 64px;
+
+  /* Colours – light */
+  --bg: #eef3f1;
+  --bg-blob-1: rgba(16, 185, 129, 0.22);
+  --bg-blob-2: rgba(56, 189, 248, 0.20);
+  --bg-blob-3: rgba(167, 139, 250, 0.16);
+
+  --text: #0f1f1a;
+  --text-muted: #4a5d56;
+  --text-faint: #6b7d76;
+  --text-on-accent: #ffffff;
+
+  --accent: #0f9d6b;
+  --accent-strong: #0b7f56;
+  --accent-soft: rgba(15, 157, 107, 0.12);
+  --accent-ring: rgba(15, 157, 107, 0.45);
+
+  --glass: rgba(255, 255, 255, 0.58);
+  --glass-strong: rgba(255, 255, 255, 0.78);
+  --glass-subtle: rgba(255, 255, 255, 0.36);
+  --glass-border: rgba(255, 255, 255, 0.75);
+  --glass-edge: rgba(15, 31, 26, 0.08);
+  --sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0) 42%);
+  --blur: 22px;
+  --saturate: 165%;
+
+  --shadow-sm: 0 1px 2px rgba(15, 31, 26, 0.06), 0 2px 8px rgba(15, 31, 26, 0.05);
+  --shadow-md: 0 1px 2px rgba(15, 31, 26, 0.05), 0 8px 24px rgba(15, 31, 26, 0.08), 0 24px 48px -24px rgba(15, 31, 26, 0.14);
+  --shadow-lg: 0 2px 4px rgba(15, 31, 26, 0.05), 0 16px 40px rgba(15, 31, 26, 0.12), 0 40px 80px -40px rgba(15, 31, 26, 0.22);
+
+  --success: #0f9d6b;
+  --success-soft: rgba(15, 157, 107, 0.14);
+  --warning: #b45309;
+  --warning-soft: rgba(217, 119, 6, 0.14);
+  --danger: #c2410c;
+  --danger-strong: #b91c1c;
+  --danger-soft: rgba(220, 38, 38, 0.12);
+  --info: #0369a1;
+  --info-soft: rgba(2, 132, 199, 0.12);
+  --neutral-soft: rgba(15, 31, 26, 0.07);
+
+  /* Chart series (categorical, checked for contrast on glass in both themes) */
+  --series-1: #0f9d6b;
+  --series-2: #2563eb;
+  --series-3: #c2410c;
+  --series-4: #7c3aed;
+  --grid-line: rgba(15, 31, 26, 0.09);
+
+  --code-bg: rgba(15, 31, 26, 0.05);
+  --overlay: rgba(10, 20, 16, 0.35);
+  --focus: 0 0 0 3px var(--accent-ring);
+
+  /* Motion */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur: 220ms;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0a1210;
+  --bg-blob-1: rgba(16, 185, 129, 0.20);
+  --bg-blob-2: rgba(56, 189, 248, 0.13);
+  --bg-blob-3: rgba(139, 92, 246, 0.14);
+
+  --text: #e6f0ec;
+  --text-muted: #a3b5ae;
+  --text-faint: #84978f;
+
+  --accent: #34d399;
+  --accent-strong: #6ee7b7;
+  --accent-soft: rgba(52, 211, 153, 0.14);
+  --accent-ring: rgba(52, 211, 153, 0.5);
+  --text-on-accent: #04241a;
+
+  --glass: rgba(22, 32, 29, 0.58);
+  --glass-strong: rgba(26, 38, 34, 0.84);
+  --glass-subtle: rgba(22, 32, 29, 0.38);
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --glass-edge: rgba(255, 255, 255, 0.06);
+  --sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0) 40%);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.35), 0 10px 28px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.4), 0 20px 48px rgba(0, 0, 0, 0.5);
+
+  --success: #34d399;
+  --success-soft: rgba(52, 211, 153, 0.16);
+  --warning: #fbbf24;
+  --warning-soft: rgba(251, 191, 36, 0.14);
+  --danger: #fb923c;
+  --danger-strong: #f87171;
+  --danger-soft: rgba(248, 113, 113, 0.14);
+  --info: #7dd3fc;
+  --info-soft: rgba(125, 211, 252, 0.13);
+  --neutral-soft: rgba(255, 255, 255, 0.07);
+
+  --series-1: #34d399;
+  --series-2: #60a5fa;
+  --series-3: #fb923c;
+  --series-4: #c4b5fd;
+  --grid-line: rgba(255, 255, 255, 0.08);
+
+  --code-bg: rgba(0, 0, 0, 0.28);
+  --overlay: rgba(0, 0, 0, 0.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur: 0ms;
+  }
+}

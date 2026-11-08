@@ -27,7 +27,8 @@ Engineer's browser ──► FastAPI app on the engineer's laptop (127.0.0.1 onl
 - Commands depend on the **OS family, not the model**. Models are catalog data that point to a driver.
 
 ## 3. Tech stack and constraints
-- **Backend:** Python 3.12, FastAPI, Pydantic v2, Uvicorn, Netmiko, pyserial, PyMongo (sync client is
+- **Backend:** Python 3.12 (target; 3.10 is used until 3.12 is installed – code must run on both, so no
+  3.11+ only features such as `datetime.UTC`, `StrEnum` or `tomllib`), FastAPI, Pydantic v2, Uvicorn, Netmiko, pyserial, PyMongo (sync client is
   fine – Netmiko is synchronous), pytest. Background push jobs in a thread pool.
 - **Frontend:** React + Vite + React Router, **plain CSS** with CSS variables, lucide-react icons,
   `@fontsource-variable/inter` and `jetbrains-mono`. No UI framework, no Tailwind.
@@ -71,9 +72,10 @@ netconfig-studio/
 └── docs/                        # architecture, drivers, security, lab testing, user guide
 ```
 
-## 5. The existing frontend (keep it)
-`frontend/` already contains the full UI on demo data: Overview (topology map, device panel,
-KPIs, charts), Devices, Configure (5-step wizard), Catalog and History.
+## 5. The frontend (keep its design system)
+The original frontend was not available, so `frontend/` was rebuilt in Phase 1B (author's decision,
+2026-11-08) with the same pages: Overview (topology map, device panel, KPIs, charts), Devices,
+Configure (5-step wizard), Catalog and History, plus Login, Users, Audit log and SSH host keys.
 - **Keep the design system** in `src/styles/tokens.css` and `src/styles/app.css`: light
   "liquid glass" theme (frosted panels with `backdrop-filter`, top-edge sheen, radii 18–32 px,
   soft layered shadows, green accent), dark theme, 44 px touch targets, visible focus, reduced
