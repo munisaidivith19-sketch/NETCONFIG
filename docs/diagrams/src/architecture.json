@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "NetConfig Studio Architecture",
+    "output": "docs/diagrams/architecture.html",
+    "quality_profile": "showcase",
+    "locale": "en"
+  },
+  "components": [
+    { "id": "browser", "type": "frontend", "label": "Browser", "sublabel": "React SPA, same origin", "pos": [40, 300], "size": [136, 64] },
+    { "id": "guard", "type": "security", "label": "Localhost Guard", "sublabel": "Host · Origin · CSP", "pos": [291, 300], "size": [136, 64], "tag": "X-Requested-With" },
+    { "id": "api", "type": "backend", "label": "REST API /api/*", "sublabel": "FastAPI routers", "pos": [477, 300], "size": [136, 64], "tag": "deny by default" },
+    { "id": "jobs", "type": "backend", "label": "Job Runner", "sublabel": "thread pool + states", "pos": [703, 300], "size": [136, 64] },
+    { "id": "push", "type": "backend", "label": "Push Engine", "sublabel": "backup→apply→verify", "pos": [939, 300], "size": [136, 64], "tag": "denylist · mgmt-if" },
+    { "id": "netmiko", "type": "backend", "label": "Netmiko", "sublabel": "SSH · serial · lab telnet", "pos": [1125, 300], "size": [136, 64] },
+    { "id": "devices", "type": "external", "label": "Network Devices", "sublabel": "switches · routers", "pos": [1371, 300], "size": [136, 64] },
+
+    { "id": "sessions", "type": "security", "label": "Sessions + RBAC", "sublabel": "bcrypt · httpOnly", "pos": [263, 140], "size": [136, 64] },
+    { "id": "mongo", "type": "database", "label": "MongoDB (local)", "sublabel": "catalog · jobs · audit", "pos": [477, 140], "size": [136, 64], "tag": "no device secrets" },
+    { "id": "vault", "type": "security", "label": "Credential Vault", "sublabel": "SecretStr, per job", "pos": [939, 140], "size": [136, 64], "tag": "memory only" },
+
+    { "id": "validation", "type": "backend", "label": "Validation", "sublabel": "ipaddress · allowlists", "pos": [477, 470], "size": [136, 64] },
+    { "id": "drivers", "type": "backend", "label": "OS Drivers", "sublabel": "pure generators", "pos": [939, 470], "size": [136, 64], "tag": "golden-file tested" }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Engineer laptop · Windows 11 · 127.0.0.1", "wraps": ["browser", "guard", "api", "jobs", "push", "netmiko", "sessions", "mongo", "vault", "validation", "drivers"] }
+  ],
+  "connections": [
+    { "id": "browser-guard", "from": "browser", "to": "guard", "label": "fetch + cookie", "variant": "emphasis" },
+    { "id": "guard-api", "from": "guard", "to": "api", "variant": "emphasis" },
+    { "id": "guard-sessions", "from": "guard", "to": "sessions", "label": "check session", "variant": "security", "fromSide": "top", "toSide": "bottom" },
+    { "id": "sessions-mongo", "from": "sessions", "to": "mongo", "variant": "dashed" },
+    { "id": "api-mongo", "from": "api", "to": "mongo", "label": "CRUD + audit", "fromSide": "top", "toSide": "bottom" },
+    { "id": "api-validation", "from": "api", "to": "validation", "label": "preview plan", "fromSide": "bottom", "toSide": "top" },
+    { "id": "validation-drivers", "from": "validation", "to": "drivers", "label": "generate commands" },
+    { "id": "api-jobs", "from": "api", "to": "jobs", "label": "run job", "variant": "emphasis" },
+    { "id": "jobs-mongo", "from": "jobs", "to": "mongo", "label": "progress (masked)", "variant": "dashed", "fromSide": "top", "toSide": "right" },
+    { "id": "jobs-push", "from": "jobs", "to": "push", "label": "device step", "variant": "emphasis" },
+    { "id": "push-vault", "from": "push", "to": "vault", "label": "read creds", "variant": "security", "fromSide": "top", "toSide": "bottom" },
+    { "id": "push-drivers", "from": "push", "to": "drivers", "label": "commands · checks", "fromSide": "bottom", "toSide": "top" },
+    { "id": "push-netmiko", "from": "push", "to": "netmiko", "variant": "emphasis" },
+    { "id": "netmiko-devices", "from": "netmiko", "to": "devices", "label": "SSH / console", "variant": "emphasis" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "Security controls", "items": ["Bound to 127.0.0.1; Host allowlist blocks DNS rebinding", "Origin + custom header block CSRF to localhost", "Credentials wiped when the job ends"] },
+    { "dot": "emerald", "title": "Safe push", "items": ["Backup before apply; stop on first CLI error", "Cisco revert timer / Junos commit confirmed", "Production devices need a second approver"] },
+    { "dot": "cyan", "title": "Testing seams", "items": ["Drivers are pure: golden-file tests", "Netmiko swapped for a fake connection in tests"] }
+  ]
+}

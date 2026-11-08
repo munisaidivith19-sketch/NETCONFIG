@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Secrets and local settings
+.env
+*.pem
+*.key
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# Archify build receipts (contain absolute local paths)
+docs/diagrams/*.finalize*.json
+docs/diagrams/*.browser-check.json
+.archify/
+docs/diagrams/*.delivery.json

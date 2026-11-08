@@ -1,0 +1,287 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "NetConfig Studio Push Flow",
+    "quality_profile": "showcase",
+    "locale": "en",
+    "output": "docs/diagrams/push-flow.html"
+  },
+  "lanes": [
+    {
+      "id": "engineer",
+      "label": "People"
+    },
+    {
+      "id": "server",
+      "label": "App (no device change)"
+    },
+    {
+      "id": "device",
+      "label": "Device session"
+    },
+    {
+      "id": "recovery",
+      "label": "Stop + rollback",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "plan",
+      "label": "Plan + approve",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "gate",
+      "label": "Connect",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "emphasis"
+    },
+    {
+      "id": "execute",
+      "label": "Change window",
+      "fromCol": 3,
+      "toCol": 5,
+      "variant": "dashed"
+    }
+  ],
+  "groups": [],
+  "mainPath": [
+    "form",
+    "validate",
+    "preview",
+    "approval",
+    "connect",
+    "checks",
+    "apply",
+    "verify",
+    "save"
+  ],
+  "nodes": [
+    {
+      "id": "form",
+      "lane": "engineer",
+      "col": 0,
+      "type": "frontend",
+      "label": "Plan form",
+      "sublabel": "wizard input",
+      "width": 140
+    },
+    {
+      "id": "validate",
+      "lane": "server",
+      "col": 0,
+      "type": "security",
+      "label": "Validate",
+      "sublabel": "section 8.4 rules",
+      "width": 140
+    },
+    {
+      "id": "preview",
+      "lane": "server",
+      "col": 1,
+      "type": "backend",
+      "label": "Generate + preview",
+      "sublabel": "masked · denylist",
+      "width": 140
+    },
+    {
+      "id": "approval",
+      "lane": "engineer",
+      "col": 1,
+      "type": "security",
+      "label": "Approval",
+      "sublabel": "production only",
+      "tag": "approver ≠ requester",
+      "width": 140
+    },
+    {
+      "id": "connect",
+      "lane": "device",
+      "col": 2,
+      "type": "external",
+      "label": "Connect + backup",
+      "sublabel": "save running-config",
+      "tag": "host key pinned",
+      "width": 140
+    },
+    {
+      "id": "checks",
+      "lane": "server",
+      "col": 3,
+      "type": "security",
+      "label": "Pre-checks",
+      "sublabel": "mgmt-if · denylist",
+      "width": 140
+    },
+    {
+      "id": "apply",
+      "lane": "device",
+      "col": 3,
+      "type": "backend",
+      "label": "Apply",
+      "sublabel": "stop on 1st error",
+      "width": 140
+    },
+    {
+      "id": "verify",
+      "lane": "device",
+      "col": 4,
+      "type": "backend",
+      "label": "Verify",
+      "sublabel": "show commands",
+      "width": 140
+    },
+    {
+      "id": "save",
+      "lane": "device",
+      "col": 5,
+      "type": "backend",
+      "label": "Confirm + save",
+      "sublabel": "status: success",
+      "width": 140
+    },
+    {
+      "id": "rejected",
+      "lane": "recovery",
+      "col": 0,
+      "type": "security",
+      "label": "Rejected",
+      "sublabel": "field errors",
+      "width": 140
+    },
+    {
+      "id": "blocked",
+      "lane": "engineer",
+      "col": 3,
+      "type": "security",
+      "label": "Blocked",
+      "sublabel": "nothing applied",
+      "width": 140
+    },
+    {
+      "id": "rollback",
+      "lane": "recovery",
+      "col": 3,
+      "type": "security",
+      "label": "Rollback",
+      "sublabel": "status: rolled_back",
+      "width": 140
+    }
+  ],
+  "edges": [
+    {
+      "id": "form-validate",
+      "from": "form",
+      "to": "validate",
+      "label": "plan"
+    },
+    {
+      "id": "validate-preview",
+      "from": "validate",
+      "to": "preview",
+      "variant": "emphasis"
+    },
+    {
+      "id": "preview-approval",
+      "from": "preview",
+      "to": "approval",
+      "label": "create job"
+    },
+    {
+      "id": "approval-connect",
+      "from": "approval",
+      "to": "connect",
+      "label": "run + creds",
+      "variant": "emphasis"
+    },
+    {
+      "id": "connect-checks",
+      "from": "connect",
+      "to": "checks",
+      "label": "find mgmt IP"
+    },
+    {
+      "id": "checks-apply",
+      "from": "checks",
+      "to": "apply",
+      "label": "safe",
+      "variant": "emphasis"
+    },
+    {
+      "id": "apply-verify",
+      "from": "apply",
+      "to": "verify"
+    },
+    {
+      "id": "verify-save",
+      "from": "verify",
+      "to": "save",
+      "label": "all checks pass",
+      "variant": "emphasis"
+    },
+    {
+      "id": "validate-rejected",
+      "from": "validate",
+      "to": "rejected",
+      "label": "invalid",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "checks-blocked",
+      "from": "checks",
+      "to": "blocked",
+      "label": "rule hit",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "apply-rollback",
+      "from": "apply",
+      "to": "rollback",
+      "label": "CLI error",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "verify-rollback",
+      "from": "verify",
+      "to": "rollback",
+      "label": "fail / unreachable",
+      "variant": "security",
+      "role": "error"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "Safety gates",
+      "items": [
+        "Denylist runs on the final command list",
+        "Management interface cannot be shut, moved or re-addressed",
+        "Telnet only to loopback / RFC1918 lab consoles"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Rollback strategy",
+      "items": [
+        "Cisco: archive + configure terminal revert timer, then configure confirm",
+        "Junos: commit confirmed, then commit",
+        "Others: restore the saved backup"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Credentials",
+      "items": [
+        "Supplied only at run time, after approval",
+        "Held as SecretStr and wiped at any terminal state"
+      ]
+    }
+  ]
+}
