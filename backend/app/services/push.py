@@ -108,8 +108,10 @@ def _mentions(config: str, ip: str) -> bool:
     return re.search(rf"(?<![\d.]){re.escape(ip)}(?![\d.])", config or "") is not None
 
 
-def _has_rsa_keys(output: str) -> bool:
-    return bool(re.search(r"Key name:|Key Data:", output or ""))
+def _ssh_enabled(output: str) -> bool:
+    """Whether SSH already runs, i.e. a usable RSA key pair exists. Counting key names in "show crypto key
+    mypubkey rsa" is wrong: IOS-XE's TP-self-signed key (HTTP server) is listed there but never enables SSH."""
+    return bool(re.search(r"SSH Enabled", output or ""))
 
 
 @dataclass
@@ -202,11 +204,11 @@ class PushEngine:
                     res.notes.append(f"Management interface: {mgmt_if} ({step.mgmt_ip}).")
             commands = driver.generate(plan, "push")
             if plan.ssh:
-                keys = conn.show("show crypto key mypubkey rsa")
-                log.add("show crypto key mypubkey rsa", "(key details hidden)")
-                if _has_rsa_keys(keys) and not plan.ssh.regenerate_keys:
+                ssh_state = conn.show("show ip ssh")
+                log.add("show ip ssh", ssh_state)
+                if _ssh_enabled(ssh_state) and not plan.ssh.regenerate_keys:
                     commands = [c for c in commands if not c.startswith("crypto key generate rsa")]
-                    res.notes.append("RSA keys already exist; they are kept (plan did not ask to replace them).")
+                    res.notes.append("SSH already has RSA keys; they are kept (plan did not ask to replace them).")
             res.commands = [log.scrub(c) for c in commands]
             violations = safety.check_denylist(commands) + safety.check_management(
                 commands, mgmt_interface=mgmt_if, mgmt_ip=step.mgmt_ip, via_ssh=via_ssh,
@@ -257,7 +259,10 @@ class PushEngine:
             outputs = {}
             for cmd in driver.verify_commands(plan):
                 outputs[cmd] = conn.show(cmd)
-                log.add(cmd, outputs[cmd])
+                # A whole config never goes into the transcript: viewers can read it, and they may not see
+                # the backup either (job_out). The checks below report what was found in it.
+                log.add(cmd, f"({len(outputs[cmd].splitlines())} lines read for verification)"
+                        if cmd.startswith("show running-config") else outputs[cmd])
             checks = driver.check(plan, outputs)
             res.checks = [_check_out(c, log) for c in checks]
             failed = [c for c in checks if c.required and not c.ok]
@@ -354,6 +359,16 @@ class PushEngine:
         held.res.output = held.log.text()
         held.conn.close()
         return res or held.res
+
+    def keep_unsaved(self, held: "Held", note: str) -> StepResult:
+        """Close a confirmed change WITHOUT saving it. Used when the other side of a link could not be confirmed:
+        a confirmed change has no revert timer left to undo it, so at least the startup configuration stays
+        as it was (a reload restores the old config)."""
+        held.res.status = "failed"
+        held.res.error = held.res.error or {"command": None, "message": "Not saved: the other side of the link "
+                                            "was not confirmed."}
+        held.res.notes.append(f"{MANUAL}: {note}")
+        return self._close(held)
 
     def abort(self, held: "Held", message: str) -> StepResult:
         """Roll back a verified but unconfirmed change (used when the other side of a link failed)."""

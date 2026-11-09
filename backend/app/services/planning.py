@@ -49,6 +49,15 @@ def commands_hash(commands: list[str]) -> str:
     return hashlib.sha256("\n".join(commands).encode("utf-8")).hexdigest()
 
 
+def custom_audit(p) -> dict | None:
+    """Audit details for the plan's custom commands (CLAUDE.md 8.5: they are written to the audit log), or None.
+    The driver adds them last; ``p.commands`` is already masked."""
+    if not (p.ok and p.plan.custom_commands):
+        return None
+    custom = p.commands[-len(p.plan.custom_commands):]
+    return {"commands": custom, "hash": commands_hash(custom)}
+
+
 def _target(db: Database, device_id: str | None, model_id: str | None) -> tuple[dict | None, dict]:
     device = None
     if device_id:

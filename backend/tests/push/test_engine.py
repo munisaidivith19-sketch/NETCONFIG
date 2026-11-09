@@ -9,7 +9,7 @@ from app.services.catalog import load_file
 from app.services.connection import ConnectFailed, ConnectionLost, ConnectParams
 from app.services.push import MANUAL, PushEngine, StepInput
 
-from .fake import RSA_KEYS, FakeConnection, FakeConnector
+from .fake import SSH_OFF, SSH_ON, FakeConnection, FakeConnector
 
 MODELS = {m["_id"]: m for m in load_file()["models"]}
 DRIVER = CiscoIos(ModelInfo.from_doc(MODELS["cisco-iosvl2"]))
@@ -143,13 +143,23 @@ def test_connect_timeout_retried_once():
 def test_p11_rsa_prompt_answered_only_when_replacing():
     plan = {"basic": {"hostname": "sw1", "domain": "lab.example.net"},
             "ssh": {"username": "netadmin", "password": "Plan-User-Pw-3", "regenerate_keys": True}}
-    fake = FakeConnection(responses={"show crypto key mypubkey rsa": RSA_KEYS}, rsa_prompt=True)
+    fake = FakeConnection(responses={"show ip ssh": SSH_ON}, rsa_prompt=True)
     result, _, fake = run(plan, fake)
     assert ("config", "crypto key generate rsa modulus 2048") in fake.sent and ("answer", "yes") in fake.sent
     # Keys exist and the plan does not ask to replace them → the line is not sent at all.
     plan["ssh"]["regenerate_keys"] = False
-    _, _, fake2 = run(plan, FakeConnection(responses={"show crypto key mypubkey rsa": RSA_KEYS}, rsa_prompt=True))
+    _, _, fake2 = run(plan, FakeConnection(responses={"show ip ssh": SSH_ON}, rsa_prompt=True))
     assert not any(c.startswith("crypto key generate") for c in fake2.config_sent())
+
+
+def test_rsa_key_generated_when_only_a_non_ssh_key_exists():
+    # IOS-XE with "ip http server" has a TP-self-signed-N key but SSH is still disabled: generate the SSH key.
+    plan = {"basic": {"hostname": "sw1", "domain": "lab.example.net"},
+            "ssh": {"username": "netadmin", "password": "Plan-User-Pw-3", "regenerate_keys": False}}
+    fake = FakeConnection(responses={"show ip ssh": SSH_OFF,
+                                     "show crypto key mypubkey rsa": "Key name: TP-self-signed-1234567\n Key Data:"})
+    _, _, fake = run(plan, fake)
+    assert ("config", "crypto key generate rsa modulus 2048") in fake.sent
 
 
 def test_secrets_scrubbed_from_result():
@@ -164,6 +174,18 @@ def test_secrets_scrubbed_from_result():
     stored = repr(result)
     for secret in ("Plan-User-Pw-3", "Device-Login-Pw-1", "Enable-Login-Pw-2", "$9$abc"):
         assert secret not in stored, secret
+
+
+def test_running_config_never_in_transcript():
+    # The hostname check reads "show running-config" after applying; only a line count reaches step output
+    # (viewers can read step output but not the backup).
+    plan = {"basic": {"hostname": "sw1"}, "revert_minutes": 10}
+    fake = FakeConnection(responses={"show running-config": "hostname sw1\narchive\n path flash0:x\n"
+                                     "snmp-server location Rack-7-SECRET-ROOM\n"})
+    result, _, _ = run(plan, fake)
+    assert result.status == "success", result.error
+    assert "Rack-7-SECRET-ROOM" not in result.output
+    assert "lines read for verification" in result.output and "lines saved as backup" in result.output
 
 
 def test_cancel_before_apply():

@@ -54,13 +54,17 @@ def _replace(match: re.Match) -> str:
     return match.group("keep") + MASK
 
 
+def _mask_line(line: str) -> str:
+    for pattern in _PATTERNS:
+        line = pattern.sub(_replace, line)
+    return line
+
+
 def mask_text(text: str) -> str:
+    """Mask line by line: "\\s+" in a pattern must never run on into the next line (" key 1\\n  key-string ...")."""
     if not text:
         return text
-    out = text
-    for pattern in _PATTERNS:
-        out = pattern.sub(_replace, out)
-    return out
+    return "".join(_mask_line(line) for line in text.splitlines(keepends=True))
 
 
 def mask_lines(lines: list[str]) -> list[str]:

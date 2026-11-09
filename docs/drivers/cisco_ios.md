@@ -296,7 +296,7 @@ line vty 0 4
 - Cisco recommends 2048-bit or larger keys; 768 is the minimum for SSH v2.
 - `transport input ssh` refuses Telnet on the VTY lines.
 - **Prompt:** if keys already exist the device asks `Do you really want to replace them? [yes/no]:`.
-  The push engine checks `show crypto key mypubkey rsa` first and does not regenerate existing keys
+  The push engine checks `show ip ssh` first and does not regenerate keys while SSH is enabled
   unless the plan asks for it explicitly (Phase 3A handles the prompt).
 - VTY ranges differ (routers `0 4`, Catalyst `0 15`). The driver writes `line vty 0 4`, plus
   `line vty 5 15` when the model sets `vty_lines: 16` **[LAB]**.
@@ -374,7 +374,9 @@ Source: [Using the Command-Line Interface, 15.2(2)E (Catalyst 2960-XR)](https://
 - Interface abbreviations (`gi1/0/1`, `te1/1/1`, `vl10`, `po1`) are expanded before validation; an ambiguous
   abbreviation (`f0/1`, `t1/0/1`) is left as typed and fails the model's port pattern.
 - `crypto key generate rsa` is listed in the preview; the push engine (Phase 3A) sends it only when
-  `show crypto key mypubkey rsa` shows no key, or when the plan asks to replace the keys.
+  `show ip ssh` says SSH is not enabled (no usable key), or when the plan asks to replace the keys.
+  `show crypto key mypubkey rsa` is not used: on IOS-XE it also lists the HTTP server's `TP-self-signed-N`
+  key, which does not enable SSH.
 - Verification reads `show running-config` for settings without a dedicated show command (hostname,
   hardening, static routes, EIGRP networks, VTY lines). Neighbour/up-down state checks are informational
   and do not fail a push on their own.
@@ -388,7 +390,7 @@ Source: [Using the Command-Line Interface, 15.2(2)E (Catalyst 2960-XR)](https://
   `configure terminal revert timer N` (N = plan `revert_minutes`, default 10). After verification:
   `configure confirm`, then `write memory`. On failure: `configure revert now`.
 - `crypto key generate rsa modulus N` asks "Do you really want to replace them? [yes/no]" when keys exist.
-  It is only sent when `show crypto key mypubkey rsa` shows no key or the plan sets `regenerate_keys`;
+  It is only sent when `show ip ssh` says SSH is disabled or the plan sets `regenerate_keys`;
   the prompt is then answered `yes` (Netmiko `send_command` with `expect_string`).
 - Still **experimental**: none of this has been run on IOSv / IOSvL2 yet. The checklist is in
   `docs/LAB_TESTING.md` (Phase 3B); only after it passes is the driver marked `tested`.

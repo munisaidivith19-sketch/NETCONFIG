@@ -45,7 +45,7 @@ def list_jobs(_: SessionUser = Depends(require_viewer), db: Database = Depends(g
               device_id: ObjectIdStr | None = Query(None),
               kind: str | None = Query(None, pattern="^(push|multi|link|bootstrap)$"),
               page: int = Query(1, ge=1, le=1000), page_size: int = Query(25, ge=1, le=100)) -> dict:
-    jobs.expire_sweep(db)
+    # Overdue approvals are expired by the runner's sweeper (every minute), not by reads.
     query: dict = {}
     if status:
         query["status"] = status
@@ -61,9 +61,8 @@ def list_jobs(_: SessionUser = Depends(require_viewer), db: Database = Depends(g
 
 @router.get("/{job_id}")
 def get_job(job_id: str, user: SessionUser = Depends(require_viewer), db: Database = Depends(get_db)) -> dict:
-    jobs.expire_sweep(db)
     # The running-config backup is masked, but a whole device config is more than read-only users need.
-    return jobs.job_out(jobs.get(db, job_id), backup=RANK.get(user.role, -1) >= RANK["engineer"])
+    return jobs.job_out(jobs.get_current(db, job_id), backup=RANK.get(user.role, -1) >= RANK["engineer"])
 
 
 @router.post("/{job_id}/approve")

@@ -52,5 +52,13 @@ def test_idempotent_and_multiline():
     assert "abc" not in once and "$9$x" not in once and "hostname a" in once
 
 
+def test_never_masks_across_a_line_break():
+    # " key 1" (a key-chain key id) must not swallow the newline and mask the next line's keyword.
+    # The id itself is masked (harmless, see the pattern's comment); the next line's keyword survives.
+    text = "key chain K\n key 1\n  key-string 7 ABC\r\n key 2\n\n  key-string 0 DEF\n"
+    assert mask_text(text) == (f"key chain K\n key {MASK}\n  key-string 7 {MASK}\r\n key {MASK}\n\n"
+                               f"  key-string 0 {MASK}\n")
+
+
 def test_mask_lines():
     assert mask_lines(["enable secret x", "vlan 10"]) == ["enable secret " + MASK, "vlan 10"]

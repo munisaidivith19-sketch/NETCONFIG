@@ -33,12 +33,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        try:
+        def prepare_db() -> None:
             ensure_indexes(app.state.db)
             seed_if_empty(app.state.db)
-            app.state.runner.start()  # crash recovery + approval expiry sweep
-        except Exception as exc:  # noqa: BLE001 - app still starts; /api/health reports "down"
-            log.warning("MongoDB not available at startup (%s); /api/health will report it.", type(exc).__name__)
+
+        # Indexes, seed, crash recovery and the approval expiry sweep. If MongoDB is not up yet the app still
+        # starts (/api/health reports "down") and these are retried in the background until it is.
+        app.state.runner.start(prepare_db)
         if settings.simulate_devices:
             log.warning("SIMULATE_DEVICES=true: pushes go to simulated devices, not the network.")
         if settings.allow_remote:

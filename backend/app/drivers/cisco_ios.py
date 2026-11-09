@@ -157,8 +157,8 @@ class CiscoIos:
         out.append(f"username {s.username} privilege 15 secret {secret(s.password, 'ssh.password')}")
         if s.set_enable_secret:
             out.append(f"enable secret {secret(s.enable_secret, 'ssh.enable_secret')}")
-        # The push engine checks "show crypto key mypubkey rsa" first and only sends this line when there
-        # are no keys or regenerate_keys is set (it then answers the replace prompt) – see push.py.
+        # The push engine checks "show ip ssh" first and only sends this line when SSH is not enabled yet
+        # (no usable key) or regenerate_keys is set (it then answers the replace prompt) – see push.py.
         out.append(f"crypto key generate rsa modulus {s.rsa_modulus}")
         out.append("ip ssh version 2")
         ranges = ["0 4"] + (["5 15"] if int(self.flags.get("vty_lines", 5)) >= 16 else [])

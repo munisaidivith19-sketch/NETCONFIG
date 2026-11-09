@@ -161,6 +161,18 @@ def test_expiry(client_for, db):
     assert eng.get(f"/api/jobs/{job['id']}").json()["status"] == "expired"
 
 
+def test_overdue_job_shown_expired_without_waiting_for_the_sweeper(client_for, db):
+    eng, admin, job = production_job(client_for)
+    other = create_job(eng, make_device(admin, name="lab-sw2", ip="10.0.0.3", tags=["production"]),
+                       {"vlans": [{"id": 10, "name": "Sales"}]})
+    set_deadline(db, job, -timedelta(seconds=1))
+    set_deadline(db, other, -timedelta(seconds=1))
+    assert eng.get(f"/api/jobs/{job['id']}").json()["status"] == "expired"
+    # Reads expire only the job being read; the rest is the sweeper's work.
+    assert db.jobs.find_one({"_id": ObjectId(other["id"])})["status"] == "awaiting_approval"
+    assert db.audit_log.count_documents({"action": "job.expire"}) == 1
+
+
 def test_approve_just_before_deadline(client_for, db):
     eng, admin, job = production_job(client_for)
     set_deadline(db, job, timedelta(minutes=1))
@@ -223,6 +235,60 @@ def test_p19_crash_recovery(runner, db):
     assert runner.recover() == 1
     doc = db.jobs.find_one({"_id": _id})
     assert doc["status"] == "failed" and "Interrupted" in doc["steps"][0]["error"]["message"]
+
+
+def test_cancel_running_job_only_while_its_worker_runs(client_for, runner, db):
+    from concurrent.futures import Future
+
+    eng = client_for("engineer")
+    job = create_job(eng, make_device(eng), {"vlans": [{"id": 10, "name": "Sales"}]})
+    db.jobs.update_one({"_id": ObjectId(job["id"])}, {"$set": {"status": "checking"}})
+    # Stored status says running, but no worker runs it here (finished meanwhile): refused, nothing left behind.
+    r = eng.post(f"/api/jobs/{job['id']}/cancel")
+    assert r.status_code == 409 and job["id"] not in runner.cancel_requests
+    runner.futures[job["id"]] = Future()  # a live worker
+    try:
+        assert eng.post(f"/api/jobs/{job['id']}/cancel").status_code == 200
+        assert job["id"] in runner.cancel_requests
+        entry = db.audit_log.find_one({"action": "job.cancel"})
+        assert entry["result"] == "requested" and entry["details"]["status_when_requested"] == "checking"
+    finally:
+        runner.futures.pop(job["id"], None)
+        runner.cancel_requests.discard(job["id"])
+
+
+def test_startup_retried_until_database_is_up(db, settings):
+    # MongoDB started after the app: indexes/seed/recovery are retried, and no job may run before recovery
+    # (it would be marked failed as "interrupted").
+    from app.services.jobs import JobRunner
+
+    _id = db.jobs.insert_one({"status": "applying", "steps": [{"status": "applying", "timeline": []}],
+                              "created_at": clock.now()}).inserted_id
+    tries = []
+
+    def prepare():
+        tries.append(1)
+        if len(tries) < 3:
+            raise ConnectionError("database down")
+
+    r = JobRunner(db, settings, connector=SimulatedConnector())
+    r.startup_retry_seconds = 0.01
+    try:
+        r.start(prepare)
+        assert r.recovered.wait(5) and len(tries) == 3
+        assert db.jobs.find_one({"_id": _id})["status"] == "failed"
+    finally:
+        r.shutdown()
+
+
+def test_run_refused_until_recovered(client_for, runner):
+    eng = client_for("engineer")
+    job = create_job(eng, make_device(eng), {"vlans": [{"id": 10, "name": "Sales"}]})
+    runner.recovered.clear()
+    r = eng.post(f"/api/jobs/{job['id']}/run", json=RUN)
+    assert r.status_code == 503 and "starting" in r.json()["error"]["message"]
+    runner.recovered.set()
+    assert run_job(eng, runner, job)["status"] == "success"
 
 
 def test_viewer_reads_history_but_cannot_act(client_for, runner):

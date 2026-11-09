@@ -142,10 +142,9 @@ class SimulatedDevice:
             return (f"Name: {m.group(1)}\nSwitchport: Enabled\nAdministrative Mode: {mode}\n"
                     f"Trunking Native Mode VLAN: {native}\nTrunking VLANs Enabled: {allowed}\n")
         if c == "show ip ssh":
-            on = self.rsa_keys and "ip ssh version 2" in self.top
-            return "SSH Enabled - version 2.0" if on else "SSH Disabled - version 1.99"
-        if c == "show crypto key mypubkey rsa":
-            return "% Key name: sim.lab\n Key Data:\n  30820122 ..." if self.rsa_keys else ""
+            # Like IOS: a key pair enables SSH; "ip ssh version 2" only changes the version shown.
+            version = "2.0" if "ip ssh version 2" in self.top else "1.99"
+            return f"SSH {'Enabled' if self.rsa_keys else 'Disabled'} - version {version}"
         if c == "show ip dhcp pool":
             return "\n".join(f"\nPool {h.split()[-1]} :\n Total addresses : 254"
                              for h in self.sections if h.startswith("ip dhcp pool "))

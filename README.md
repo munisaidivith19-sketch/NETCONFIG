@@ -63,6 +63,8 @@ Real testing uses GNS3 / CML: follow `docs/LAB_TESTING.md`.
 - **Router link**: pick two routers, their facing ports and a /30 or /31. Both sides get their address and
   matching OSPF / EIGRP / eBGP settings, and the two plans are checked to match before anything is sent.
   Both sides are applied and verified, then confirmed together; if one side fails, the other is rolled back.
+  (One narrow exception: if B's confirm fails in the seconds after A's, A cannot be rolled back automatically.
+  A is then **not saved**, and the job asks you to remove the link from A or reload it.)
 - **First-time setup**: a new device over its serial console (USB cable, COMx) or a GNS3/CML lab console.
   Sets hostname, management address, gateway, admin user, enable secret, RSA keys, SSH v2 and SSH-only VTY
   lines, then tests an SSH login. Only if that works is the device switched to SSH.

@@ -1,10 +1,13 @@
 """P14 host-key pinning and P15 Telnet rules, through the real Connector with a fake probe and opener."""
 
 import base64
+from types import SimpleNamespace
 
 import pytest
 from pydantic import SecretStr
+from pymongo.collection import Collection
 
+from app.services import hostkeys
 from app.services.connection import ConnectFailed, ConnectParams, HostKey
 from app.services.hostkeys import Connector
 
@@ -60,6 +63,37 @@ def test_keys_are_per_host_and_port(db):
     conn.open(params(port=22))
     conn.open(params(port=2222))
     assert db.host_keys.count_documents({"host": "10.0.0.2"}) == 2
+
+
+def test_first_use_race_compares_against_the_key_stored_first(db, monkeypatch):
+    # Two jobs reach a new host together: the second insert hits the unique index. It must then be checked
+    # against the stored key (refused if different), not crash with DuplicateKeyError.
+    Connector(db, probe=lambda h, p: KEY_A, opener=Opener()).open(params())
+    real = Collection.find_one
+    first = {"miss": True}
+
+    def find_one(self, *a, **kw):
+        if self.name == "host_keys" and first.pop("miss", False):
+            return None  # this job looked before the other job's insert
+        return real(self, *a, **kw)
+
+    monkeypatch.setattr(Collection, "find_one", find_one)
+    with pytest.raises(ConnectFailed, match="CHANGED"):
+        Connector(db, probe=lambda h, p: KEY_B, opener=Opener()).open(params())
+    assert db.host_keys.count_documents({}) == 1
+
+
+def test_accept_not_audited_when_nothing_was_accepted(db, monkeypatch):
+    conn = Connector(db, probe=lambda h, p: KEY_A, opener=Opener())
+    conn.open(params())
+    conn.probe = lambda h, p: KEY_B
+    with pytest.raises(ConnectFailed):
+        conn.open(params())
+    doc = db.host_keys.find_one({"host": "10.0.0.2"})
+    # The device offered yet another key between the read and the update: the conditional update matches nothing.
+    monkeypatch.setattr(Collection, "find_one_and_update", lambda self, *a, **kw: None)
+    assert hostkeys.accept(db, doc["_id"], SimpleNamespace(username="admin", user_id="x", role="admin")) is None
+    assert db.audit_log.count_documents({"action": "hostkey.accept"}) == 0
 
 
 @pytest.mark.parametrize("host", ["8.8.8.8", "203.0.113.5", None])

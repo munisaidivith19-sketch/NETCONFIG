@@ -100,6 +100,20 @@ def test_w1_multi_preview_and_push(client_for, runner, db):
     assert len(runner.vault) == 0
 
 
+def test_multi_job_custom_commands_audited_per_device(client_for, db):
+    # CLAUDE.md 8.5: custom commands are written to the audit log, also when the job is created without
+    # /api/plans/preview (several switches use /api/jobs/preview).
+    eng = client_for("engineer")
+    ids = [device(eng, "sw1", ip="10.0.0.2"), device(eng, "sw2", ip="10.0.0.3")]
+    plan = {**VLANS, "custom_commands": ["lldp run"]}
+    job = eng.post("/api/jobs", json={"device_ids": ids, "plan": plan})
+    assert job.status_code == 201, job.text
+    entries = list(db.audit_log.find({"action": "job.custom_commands"}, sort=[("seq", 1)]))
+    assert [e["target"]["name"] for e in entries] == ["sw1", "sw2"]
+    assert all(e["details"]["commands"] == ["lldp run"] and e["target"]["job"] == job.json()["id"]
+               for e in entries)
+
+
 def test_w2_multi_refuses_per_device_settings_and_non_switches(client_for):
     eng = client_for("engineer")
     ids = [device(eng, "sw1", ip="10.0.0.2"), device(eng, "sw2", ip="10.0.0.3")]
@@ -258,11 +272,13 @@ def test_w11c_link_b_not_confirmed_a_needs_manual_action(client_for, runner):
     done = run(eng, runner, job["id"], CREDS)
     sa, sb = done["steps"]
     assert sb["status"] == "rolled_back" and "write memory" not in runner.connector.sent["10.0.0.12"]
-    # A's save comes only after B's confirm was tried
+    # A was already confirmed (no timer left to undo it), so it is at least NOT saved: its startup config
+    # still matches B's, and the job asks for manual action.
     sent_a = runner.connector.sent["10.0.0.11"]
-    assert sent_a.index("configure confirm") < sent_a.index("write memory")
-    assert sa["status"] == "success" and any("MANUAL ACTION REQUIRED" in n and "r2 was not confirmed" in n
-                                             for n in sa["notes"])
+    assert "configure confirm" in sent_a and "write memory" not in sent_a
+    assert sa["status"] == "failed" and any("MANUAL ACTION REQUIRED" in n and "r2 was not confirmed" in n
+                                            and "NOT saved" in n for n in sa["notes"])
+    assert done["status"] != "success"
 
 
 def test_w11d_link_internal_error_rolls_back_and_records_a(client_for, runner, db, monkeypatch):

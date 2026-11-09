@@ -22,7 +22,8 @@ VLANS_OK = """VLAN Name                             Status    Ports
 1    default                          active    Gi0/0
 10   Sales                            active
 """
-RSA_KEYS = "% Key pair was generated at: 10:00:00 UTC Nov 8 2026\nKey name: sw1.lab.example.net\n Key Data:\n  30820122"
+SSH_ON = "SSH Enabled - version 2.0\nAuthentication methods:publickey,keyboard-interactive,password"
+SSH_OFF = "SSH Disabled - version 1.99\n%Please create RSA keys to enable SSH (and of atleast 768 bits for SSH v2)."
 
 
 class FakeConnection:

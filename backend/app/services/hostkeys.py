@@ -5,6 +5,7 @@ from collections.abc import Callable
 
 from pymongo import ReturnDocument
 from pymongo.database import Database
+from pymongo.errors import DuplicateKeyError
 
 from .. import clock
 from ..models.device import is_lab_address
@@ -23,7 +24,10 @@ def verify(db: Database, host: str, port: int, observed: HostKey, who=None) -> t
     if doc is None:
         doc = {"host": host, "port": port, **_key_doc(observed), "first_seen": now, "last_seen": now,
                "pending": None, "accepted_by": None}
-        doc["_id"] = db.host_keys.insert_one(doc).inserted_id
+        try:
+            doc["_id"] = db.host_keys.insert_one(doc).inserted_id
+        except DuplicateKeyError:  # another job pinned this host first: compare against the key it stored
+            return verify(db, host, port, observed, who)
         audit.record(db, "hostkey.first_seen", who=who, target={"type": "host", "id": f"{host}:{port}"},
                      details={"fingerprint": observed.fingerprint, "key_type": observed.key_type})
         return "new", doc
@@ -47,6 +51,8 @@ def accept(db: Database, key_id, who) -> dict | None:
         {"$set": {"key_type": pending["key_type"], "key_b64": pending["key_b64"], "fingerprint": pending["fingerprint"],
                   "pending": None, "accepted_by": who.username, "accepted_at": clock.now()}},
         return_document=ReturnDocument.AFTER)
+    if new is None:  # the pending key changed or was accepted by someone else meanwhile: nothing was accepted
+        return None
     audit.record(db, "hostkey.accept", who=who, target={"type": "host", "id": f"{doc['host']}:{doc['port']}"},
                  details={"old": doc["fingerprint"], "new": pending["fingerprint"]})
     return new

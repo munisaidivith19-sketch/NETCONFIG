@@ -9,7 +9,9 @@ A job has one step per device. Four kinds (services/wizards.py builds them):
   push       one device
   multi      the same plan on 2–20 switches, one after another (stops at the first failure by default)
   link       both ends of a router link: A and B are applied and verified, then confirmed together;
-             if either side fails, the other is rolled back too
+             if either side fails before the confirms, the other is rolled back too. Only if B's confirm
+             fails right after A's (seconds apart) is A left changed – then A is not saved and the job
+             reports a MANUAL ACTION
   bootstrap  first-time setup over a console, then an SSH test login; only if it works does the device
              switch to SSH
 """
@@ -19,6 +21,7 @@ import json
 import logging
 import threading
 from collections import defaultdict
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import ExitStack
 from datetime import timedelta
@@ -37,10 +40,10 @@ from ..models.common import oid
 from ..models.job import CANCELLABLE, RUNNING, TERMINAL, JobCreate, RunRequest
 from ..models.plan import ConfigPlan
 from ..security.sessions import SessionUser
-from . import audit, validation, wizards
+from . import audit, planning, validation, wizards
 from .connection import ConnectFailed, ConnectParams
 from .hostkeys import Connector
-from .push import MANUAL, Held, PushEngine, StepInput, StepResult
+from .push import Held, PushEngine, StepInput, StepResult
 
 log = logging.getLogger("netconfig.jobs")
 APPROVAL_HOURS = 24
@@ -201,6 +204,13 @@ def create(db: Database, settings: Settings, user: SessionUser, body: JobCreate,
                  details={"kind": b.kind, "devices": [s["device_name"] for s in steps], "status": status,
                           "plan_hash": doc["plan_hash"], "commands_hash": [s["commands_hash"] for s in steps]},
                  request_id=request_id)
+    # The commands that will really be pushed are frozen here, for every job kind and route: log the custom ones.
+    for s in b.steps:
+        if custom := planning.custom_audit(s.prepared):
+            device = s.prepared.device
+            audit.record(db, "job.custom_commands", who=user, request_id=request_id, details=custom,
+                         target={"type": "device", "id": str(device["_id"]), "name": device["name"],
+                                 "job": str(doc["_id"])})
     return doc
 
 
@@ -226,13 +236,25 @@ def _move(db: Database, job_id: ObjectId, sources: tuple[str, ...], target: str,
                                        return_document=ReturnDocument.AFTER)
 
 
+def _expire(db: Database, job_id: ObjectId) -> dict | None:
+    new = _move(db, job_id, ("awaiting_approval",), "expired")
+    if new:
+        audit.record(db, "job.expire", target={"type": "job", "id": str(job_id)})
+    return new
+
+
 def expire_sweep(db: Database) -> int:
-    count = 0
-    for doc in db.jobs.find({"status": "awaiting_approval", "approval.expires_at": {"$lte": clock.now()}}, {"_id": 1}):
-        if _move(db, doc["_id"], ("awaiting_approval",), "expired"):
-            audit.record(db, "job.expire", target={"type": "job", "id": str(doc["_id"])})
-            count += 1
-    return count
+    """All overdue approval requests → expired. Run by the background sweeper every minute."""
+    due = db.jobs.find({"status": "awaiting_approval", "approval.expires_at": {"$lte": clock.now()}}, {"_id": 1})
+    return sum(1 for doc in due if _expire(db, doc["_id"]))
+
+
+def get_current(db: Database, job_id: str) -> dict:
+    """get(), with this one job expired if its approval is overdue (the sweeper may be up to a minute late)."""
+    doc = get(db, job_id)
+    if doc["status"] == "awaiting_approval" and clock.now() >= doc["approval"]["expires_at"]:
+        return _expire(db, doc["_id"]) or get(db, job_id)
+    return doc
 
 
 def approve(db: Database, user: SessionUser, job_id: str, request_id: str) -> dict:
@@ -305,6 +327,10 @@ class JobRunner:
         self.cancel_requests: set[str] = set()
         self.futures: dict[str, Future] = {}
         self._stop = threading.Event()
+        # Set once jobs left running by the last process are marked failed. Until then no job may start:
+        # recovery would mark it failed too.
+        self.recovered = threading.Event()
+        self.startup_retry_seconds = 5.0
         if connector is None:
             if settings.simulate_devices:
                 from .simulator import SimulatedConnector
@@ -314,12 +340,27 @@ class JobRunner:
         self.connector = connector
 
     # -- lifecycle
-    def start(self) -> None:
-        self.recover()
-        expire_sweep(self.db)
-        threading.Thread(target=self._sweeper, name="ncs-expiry", daemon=True).start()
+    def start(self, prepare: Callable[[], None] = lambda: None) -> None:
+        """Startup work that needs MongoDB (``prepare`` = indexes and seed, then crash recovery). MongoDB may
+        start after the app (a Windows service at login), so a background thread retries until it is done."""
+        retry = None if self._startup(prepare) else prepare
+        threading.Thread(target=self._sweeper, args=(retry,), name="ncs-expiry", daemon=True).start()
 
-    def _sweeper(self) -> None:
+    def _startup(self, prepare: Callable[[], None]) -> bool:
+        try:
+            prepare()
+            self.recover()
+            expire_sweep(self.db)
+            return True
+        except Exception as exc:  # noqa: BLE001 - database not up yet; retried by the sweeper thread
+            log.warning("MongoDB not available (%s); startup tasks will be retried.", type(exc).__name__)
+            return False
+
+    def _sweeper(self, prepare: Callable[[], None] | None = None) -> None:
+        if prepare is not None:
+            while not self._startup(prepare):
+                if self._stop.wait(self.startup_retry_seconds):
+                    return
         while not self._stop.wait(60):
             try:
                 expire_sweep(self.db)
@@ -338,10 +379,13 @@ class JobRunner:
                                     array_filters=[{"s.status": {"$in": list(RUNNING)}}])
             audit.record(self.db, "job.interrupted", result="failed", target={"type": "job", "id": str(doc["_id"])})
             n += 1
+        self.recovered.set()
         return n
 
     # -- API actions
     def run(self, user: SessionUser, job_id: str, req: RunRequest, request_id: str) -> dict:
+        if not self.recovered.is_set():
+            raise ApiError(503, "NetConfig Studio is still starting (waiting for the database). Try again shortly.")
         doc = get(self.db, job_id)
         _owner_or_admin(doc, user)
         if doc["status"] != "ready":
@@ -396,10 +440,19 @@ class JobRunner:
             new = _move(self.db, doc["_id"], (doc["status"],), "cancelled", {"cancel_reason": "withdrawn"})
             if not new:
                 raise ApiError(409, "The job changed; reload and try again.")
+            result = "ok"
         else:
-            self.cancel_requests.add(job_id)  # honoured before any config command is sent
-            new = doc
-        audit.record(self.db, "job.cancel", who=user, target={"type": "job", "id": job_id}, request_id=request_id)
+            # Only a job whose worker is still running can be stopped. Re-check after adding: if the worker
+            # finished in between, its cleanup has already run and nobody would ever read (or remove) the request.
+            self.cancel_requests.add(job_id)
+            if job_id not in self.futures:
+                self.cancel_requests.discard(job_id)
+                raise ApiError(409, "The job has already finished; reload to see its result.")
+            # A request, not a result: it is honoured only if no configuration command was sent yet. The job's
+            # final status (cancelled or not) and its notes record what really happened.
+            new, result = doc, "requested"
+        audit.record(self.db, "job.cancel", result=result, who=user, target={"type": "job", "id": job_id},
+                     details={"status_when_requested": doc["status"]}, request_id=request_id)
         return new
 
     def wait(self, job_id: str, timeout: float = 30) -> None:
@@ -605,14 +658,18 @@ class Execution:
                                                                "confirmed, so the link stays the same on both sides.")
                 else:
                     results[1] = engines[1].confirm(held[1])
-                    if results[1] is not None:
-                        del held[1]
-                    results[0] = engines[0].save(held.pop(0))
                     if results[1] is None:
+                        results[0] = engines[0].save(held.pop(0))
                         results[1] = engines[1].save(held.pop(1))
                     else:
-                        results[0].notes.append(f"{MANUAL}: {b_name} was not confirmed, so the link is configured "
-                                                f"on {a_name} only. Fix {b_name} or remove the link from {a_name}.")
+                        # B reverts by itself, but A is already confirmed: its timer is gone and no lab-tested
+                        # command can undo it. Do not save A, so its startup config still matches B's.
+                        del held[1]
+                        results[0] = engines[0].keep_unsaved(held.pop(0), (
+                            f"{b_name} was not confirmed and restores its old configuration, but {a_name} was "
+                            f"already confirmed, so the link is configured on {a_name} only. It was NOT saved on "
+                            f"{a_name}: remove the link configuration from {a_name} (or reload it), or fix "
+                            f"{b_name} and run the link again."))
         except Exception as exc:  # noqa: BLE001 - e.g. a database error: never leave a side half-done
             for i in (0, 1):
                 if i in held:

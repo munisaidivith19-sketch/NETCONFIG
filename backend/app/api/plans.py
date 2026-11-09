@@ -25,10 +25,8 @@ def preview(body: PreviewRequest, request: Request, user: SessionUser = Depends(
                  details={"features": p.plan.features(), "commands": len(p.commands),
                           "commands_hash": p.commands_hash if p.ok else None, "errors": len(p.errors)},
                  request_id=rid(request))
-    if p.ok and p.plan.custom_commands:
-        custom = p.commands[-len(p.plan.custom_commands):]  # already masked
-        audit.record(db, "plan.custom_commands", who=user, target=target,
-                     details={"commands": custom, "hash": planning.commands_hash(custom)}, request_id=rid(request))
+    if custom := planning.custom_audit(p):
+        audit.record(db, "plan.custom_commands", who=user, target=target, details=custom, request_id=rid(request))
     driver = p.driver
     return {
         "ok": p.ok,
