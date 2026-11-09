@@ -193,6 +193,15 @@ def test_unsupported_feature_named_never_skipped():
     assert "not supported on" in r.errors["routing.eigrp"]
 
 
+def test_default_gateway_is_a_driver_capability():
+    """A driver that cannot set the management gateway must say so, not skip it."""
+    l2 = ModelInfo.from_doc(MODELS["cisco-ws-c2960x-24ts-l"])
+    plan = {"svis": [{"vlan": 1, "ip": "10.10.10.2/24"}], "default_gateway": "10.10.10.1"}
+    assert "default_gateway" not in run(plan, model=l2).errors
+    r = run(plan, model=l2, caps=ALL_CAPABILITIES - {"default_gateway"})
+    assert "not supported on" in r.errors["default_gateway"]
+
+
 def test_ssh_needs_domain():
     assert "basic.domain" in run({"basic": {"hostname": "sw1"}, "ssh": {"username": "netadmin"}}).errors
     assert "basic" in run({"ssh": {"username": "netadmin"}}).errors

@@ -55,7 +55,18 @@ $env:SIMULATE_DEVICES="true"; .venv\Scripts\python -m app
 ```
 Add a device (for example model *Cisco IOSvL2*, management IP `10.0.0.2`), then Configure → Preview →
 Create job → enter any username and password (the password `wrong` simulates a login failure) → Run.
-Real testing uses GNS3 / CML (`docs/LAB_TESTING.md`, Phase 3B).
+Real testing uses GNS3 / CML: follow `docs/LAB_TESTING.md`.
+
+## More than one device (Configure tabs)
+- **Several switches** (Configure → Device change → *Several switches*): the same VLANs and port settings
+  pushed to 2–20 switches one after another; by default it stops at the first switch that fails.
+- **Router link**: pick two routers, their facing ports and a /30 or /31. Both sides get their address and
+  matching OSPF / EIGRP / eBGP settings, and the two plans are checked to match before anything is sent.
+  Both sides are applied and verified, then confirmed together; if one side fails, the other is rolled back.
+- **First-time setup**: a new device over its serial console (USB cable, COMx) or a GNS3/CML lab console.
+  Sets hostname, management address, gateway, admin user, enable secret, RSA keys, SSH v2 and SSH-only VTY
+  lines, then tests an SSH login. Only if that works is the device switched to SSH.
+- **Templates**: save the Configure form as a named template (never with passwords) and load it later.
 
 ## How a push works
 1. **Create job** (Configure step 4): the exact commands are frozen with a SHA-256 hash. No credentials.
@@ -122,7 +133,7 @@ scripts/   Windows helper scripts
 | 2 | 2A Cisco IOS research, 2B plan validation, Cisco driver, preview API, Configure wizard | done |
 | 2 | 2C review | done |
 | 3 | 3A safe push engine, approvals, live progress, History, SSH host keys | done |
-| 3 | 3B console bootstrap, router link wizard, multi-device, templates | – |
+| 3 | 3B console bootstrap, router link wizard, multi-device, templates | done (lab checklist in `docs/LAB_TESTING.md` not run yet) |
 | 3 | 3C review | – |
 | 4 | Multi-vendor drivers, live dashboard, UI polish | – |
 | 5 | AI assistant, hardening, docs, release | – |

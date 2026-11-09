@@ -218,6 +218,16 @@ Phase 1B unless noted. Each is an HTTP test against the real middleware stack.
 Static and supply-chain checks (before every phase review): `ruff check`, `bandit -r backend/app`
 (no high findings), `pip-audit` and `npm audit` (no known high or critical findings, or a documented accepted risk).
 
+### 5.1 Phase 3B tests (automated, fake or simulated devices)
+| File | Covers |
+|---|---|
+| `tests/push/test_engine.py` (end) | `apply()` holds a verified change without confirming; `commit()` confirms and saves; `abort()` rolls back a held change; no confirm in the last seconds of the timer; lost connection while saving → MANUAL ACTION; lab console server address is not a device address (note, not blocked); SSH with an unknown management interface still blocked; serial skips the management check |
+| `tests/api/test_wizards.py` | W1 multi preview + push (P17); W2 per-device settings and non-switches refused; W3 stop on failure; W4 continue after failure; W5–W8 link preview, /31 + eBGP, validation, needs two routers; W9 link success; W10 B fails → A rolled back (P18); W11 A fails → B untouched; W12 production link needs approval; W13 bootstrap over a lab console → SSH test → device switched to SSH, secrets not stored (P20); W14 SSH test fails → stays on console; W15 bootstrap rules (console only, router needs a port, gateway in subnet, address in use); W16 admin secrets required; W17 SSH needs a login; W18 request shapes; W19 kind filter |
+| `tests/api/test_templates.py` | T1 create/list, secrets stripped; T2 duplicate name (case-insensitive); T3 roles; T4 only the author or an admin edits; T5 input validation |
+| `tests/unit/test_wizards_unit.py` | link addressing (/30, /31), side matching, bootstrap plans, job status aggregation, request/login models, SSH never opened without a login |
+| `tests/golden/cisco_ios/default_gateway_l2.*` | `ip default-gateway` on a Layer 2 switch |
+| `frontend/src/lib/wizards.test.js`, `src/pages/Wizards.test.jsx` | request bodies, plan ↔ form round trip (templates), per-step progress, router link page, first-time setup without a device login, several-switches preview |
+
 ## 7. API integration tests (`tests/api/`)
 Per router: happy path, validation errors, 404s, pagination limits, and audit side effects.
 Catalog: brand → series → model filters return the seeded sample. Devices: unique name and IP;

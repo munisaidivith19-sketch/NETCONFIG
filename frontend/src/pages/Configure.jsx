@@ -1,15 +1,26 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Boxes, CheckCircle2, ClipboardCheck, History, KeyRound, Send, Server, ShieldCheck } from 'lucide-react'
+import { Boxes, CheckCircle2, ClipboardCheck, KeyRound, Layers, Server, ShieldCheck } from 'lucide-react'
 import CodeBlock from '../components/CodeBlock.jsx'
 import JobView from '../components/JobView.jsx'
 import PlanForm from '../components/PlanForm.jsx'
-import { Alert, Badge, Empty, ErrorNote, Field, PageHeader, Panel, SkeletonRows } from '../components/ui.jsx'
+import TemplateBar from '../components/TemplateBar.jsx'
+import { ConfigureTabs, CreateJob, FinishedJob, JobPreview } from '../components/Wizard.jsx'
+import { Alert, Badge, Empty, ErrorNote, PageHeader, Panel, SkeletonRows } from '../components/ui.jsx'
 import { get, post } from '../lib/api.js'
-import { NOTE_HINT, NOTE_PATTERN } from '../lib/jobs.js'
 import { useJob } from '../lib/useJob.js'
 import { SUPPORT, categoryIcon, categoryLabel } from '../lib/labels.js'
 import { emptyForm, normalizeErrors, sectionOf, toPlan } from '../lib/plan.js'
+
+const SWITCHES = ['switch', 'l3switch']
+const MAX_SWITCHES = 20
+
+/** Multi-device errors are "steps.<i>.<plan path>" or "plan.<path>"; the form wants the plan path. */
+function multiErrors(errors) {
+  const out = {}
+  for (const [k, v] of Object.entries(errors || {})) out[k.replace(/^steps\.\d+\./, '').replace(/^plan\./, '')] ??= v
+  return out
+}
 
 const STEPS = ['Device', 'Requirements', 'Preview', 'Approval', 'Push & verify']
 
@@ -30,6 +41,58 @@ function Steps({ step, setStep, allowed }) {
   )
 }
 
+function MultiPicker({ devices, target, setTarget, setError }) {
+  const switches = devices.filter((d) => SWITCHES.includes(d.category) && d.connection?.method !== 'none')
+  const [ids, setIds] = useState(target?.kind === 'multi' ? target.ids : [])
+  const toggle = (id) => setIds((old) => (old.includes(id) ? old.filter((x) => x !== id) : old.length < MAX_SWITCHES ? [...old, id] : old))
+
+  async function next() {
+    setError(null)
+    try {
+      const chosen = switches.filter((d) => ids.includes(d.id))
+      const model = await get(`/catalog/models/${chosen[0].model_id}`)
+      // Only what every chosen switch can do is offered in the form.
+      const caps = chosen.map((d) => new Set(d.capabilities)).reduce((a, b) => new Set([...a].filter((c) => b.has(c))))
+      setTarget({
+        kind: 'multi', ids: chosen.map((d) => d.id), name: `${chosen.length} switches`, names: chosen.map((d) => d.name),
+        model, capabilities: caps, production: chosen.some((d) => d.production),
+        support: chosen.some((d) => d.support === 'experimental') ? 'experimental' : model.os_driver?.support,
+        os: model.os_driver?.name, device: null,
+      })
+    } catch (err) {
+      setError(err)
+    }
+  }
+
+  if (switches.length < 2) {
+    return <Empty icon={Layers} title="Two switches needed">Add at least two switches with a connection method to the inventory.</Empty>
+  }
+  return (
+    <div className="stack">
+      <p className="muted" style={{ margin: 0 }}>
+        The same VLANs and port settings go to every switch you pick, one switch after another. Per-device settings
+        (hostname, IP addresses, routing) are configured one device at a time.
+      </p>
+      <div className="choice-grid" role="group" aria-label="Switches">
+        {switches.map((d) => (
+          <button type="button" key={d.id} className="choice" aria-pressed={ids.includes(d.id)} onClick={() => toggle(d.id)}>
+            <Server size={22} aria-hidden="true" />
+            <strong>{d.name}</strong>
+            <small>{d.model_name || d.model_id} · {d.mgmt_ip || 'no IP'}</small>
+            {d.production && <Badge tone="danger">production</Badge>}
+          </button>
+        ))}
+      </div>
+      <div className="form-actions">
+        <span className="faint">{ids.length} selected (2–{MAX_SWITCHES})</span>
+        <button type="button" className="btn primary" disabled={ids.length < 2} onClick={next}>
+          Continue with {ids.length} switches
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function DeviceStep({ target, setTarget }) {
   const [mode, setMode] = useState(target?.kind || 'device')
   const [devices, setDevices] = useState(null)
@@ -38,7 +101,7 @@ function DeviceStep({ target, setTarget }) {
 
   useEffect(() => {
     const ctrl = new AbortController()
-    const req = mode === 'device'
+    const req = mode !== 'model'
       ? get('/devices', { query: { page_size: 200 }, signal: ctrl.signal }).then((r) => setDevices(r.items))
       : get('/catalog/models', { query: { page_size: 200 }, signal: ctrl.signal }).then((r) => setModels(r.items))
     req.catch((err) => err.name !== 'AbortError' && setError(err))
@@ -66,12 +129,15 @@ function DeviceStep({ target, setTarget }) {
     }
   }
 
-  const list = mode === 'device' ? devices : models
+  const list = mode === 'model' ? models : devices
   return (
-    <Panel title="Choose the target" subtitle="An inventory device, or just a catalog model to see the commands it would get.">
+    <Panel title="Choose the target" subtitle="An inventory device, several switches at once, or just a catalog model to see the commands it would get.">
       <div className="row" role="group" aria-label="Target type" style={{ marginBottom: 'var(--space-4)' }}>
         <button type="button" className={`btn ${mode === 'device' ? 'primary' : ''}`} aria-pressed={mode === 'device'} onClick={() => setMode('device')}>
           <Server size={18} aria-hidden="true" /> Inventory device
+        </button>
+        <button type="button" className={`btn ${mode === 'multi' ? 'primary' : ''}`} aria-pressed={mode === 'multi'} onClick={() => setMode('multi')}>
+          <Layers size={18} aria-hidden="true" /> Several switches
         </button>
         <button type="button" className={`btn ${mode === 'model' ? 'primary' : ''}`} aria-pressed={mode === 'model'} onClick={() => setMode('model')}>
           <Boxes size={18} aria-hidden="true" /> Catalog model (preview only)
@@ -79,13 +145,14 @@ function DeviceStep({ target, setTarget }) {
       </div>
       <ErrorNote error={error} />
       {!list && !error && <SkeletonRows rows={3} />}
-      {list && list.length === 0 && (
+      {mode === 'multi' && devices && <MultiPicker devices={devices} target={target} setTarget={setTarget} setError={setError} />}
+      {mode !== 'multi' && list && list.length === 0 && (
         <Empty icon={Server} title={mode === 'device' ? 'No devices yet' : 'The catalog is empty'}
           action={mode === 'device' ? <Link className="btn primary" to="/devices">Add a device</Link> : null}>
           {mode === 'device' ? 'Add the device to the inventory first, or preview against a catalog model.' : 'Run scripts/seed_catalog.py.'}
         </Empty>
       )}
-      {list && list.length > 0 && (
+      {mode !== 'multi' && list && list.length > 0 && (
         <div className="choice-grid">
           {list.map((item) => {
             const Icon = categoryIcon(item.category)
@@ -111,10 +178,11 @@ function DeviceStep({ target, setTarget }) {
   )
 }
 
-function PreviewStep({ preview, error, loading, onRetry, goFix }) {
+function PreviewStep({ preview, multi, error, loading, onRetry, goFix }) {
   if (loading) return <Panel title="Preview"><SkeletonRows rows={6} /></Panel>
   if (error) return <Panel title="Preview"><ErrorNote error={error} /><button type="button" className="btn" onClick={onRetry}>Try again</button></Panel>
   if (!preview) return null
+  if (multi) return <JobPreview preview={preview} />
   const errorList = Object.entries(preview.errors)
   return (
     <div className="grid two">
@@ -161,45 +229,20 @@ function PreviewStep({ preview, error, loading, onRetry, goFix }) {
   )
 }
 
-function CreateJob({ target, plan, onCreated }) {
-  const [note, setNote] = useState('')
-  const [error, setError] = useState(null)
-  const [busy, setBusy] = useState(false)
-  const badNote = !NOTE_PATTERN.test(note)
-
-  async function create() {
-    setBusy(true)
-    setError(null)
-    try {
-      onCreated(await post('/jobs', { device_id: target.id, plan, note }))
-    } catch (err) {
-      setError(err)
-    } finally {
-      setBusy(false)
-    }
-  }
-
+/** Configure's create step: the shared CreateJob, plus "stop on failure" for several switches. */
+function CreateChange({ target, plan, onCreated }) {
+  const [stopOnFailure, setStopOnFailure] = useState(true)
+  const multi = target.kind === 'multi'
+  const body = multi ? { device_ids: target.ids, plan, stop_on_failure: stopOnFailure } : { device_id: target.id, plan }
   return (
-    <Panel title="Create the push job" subtitle="The job freezes these exact commands. Credentials are asked for only when it runs.">
-      <div className="stack">
-        {target.production ? (
-          <Alert tone="warning" title="Production device.">
-            A second user (an admin) must approve this change before it can run. The request expires after 24 hours.
-          </Alert>
-        ) : (
-          <Alert tone="info">This device is not tagged production, so no second approval is needed: you can run it next.</Alert>
-        )}
-        <Field label="Change note (optional)" hint="Why this change? Shown in History and to the approver." error={badNote ? NOTE_HINT : null}>
-          {(props) => <input {...props} className="input" value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} />}
-        </Field>
-        <ErrorNote error={error} />
-        <div className="form-actions">
-          <button type="button" className="btn primary" disabled={busy || badNote} onClick={create}>
-            <Send size={18} aria-hidden="true" /> {busy ? 'Creating…' : target.production ? 'Request approval' : 'Create job'}
-          </button>
-        </div>
-      </div>
-    </Panel>
+    <CreateJob body={body} production={target.production} onCreated={onCreated}>
+      {multi && (
+        <label className="checkbox">
+          <input type="checkbox" checked={stopOnFailure} onChange={(e) => setStopOnFailure(e.target.checked)} />
+          <span>Stop at the first switch that fails (recommended: a bad plan does not reach every switch)</span>
+        </label>
+      )}
+    </CreateJob>
   )
 }
 
@@ -258,15 +301,21 @@ export default function Configure() {
     setLoading(true)
     setPreviewError(null)
     try {
+      if (target.kind === 'multi') {
+        const res = await post('/jobs/preview', { device_ids: target.ids, plan: toPlan(form) })
+        setPreview(res)
+        setErrors(multiErrors(res.errors))
+        return
+      }
       const body = { plan: toPlan(form), [target.kind === 'device' ? 'device_id' : 'model_id']: target.id }
       const res = await post('/plans/preview', body)
       setPreview(res)
       setErrors(res.errors)
     } catch (err) {
       if (err.status === 422 && Object.keys(err.fields).length) {
-        const fields = normalizeErrors(err.fields)
+        const fields = target.kind === 'multi' ? multiErrors(err.fields) : normalizeErrors(err.fields)
         setErrors(fields)
-        setPreview({ ok: false, errors: fields, warnings: [], commands: [], verify_commands: [], driver: { name: target.os } })
+        setPreview({ ok: false, errors: fields, warnings: [], steps: [], commands: [], verify_commands: [], driver: { name: target.os } })
       } else {
         setPreviewError(err)
         setPreview(null)
@@ -287,21 +336,23 @@ export default function Configure() {
     if (job && !started) resetJob() // a job not yet run belongs to the old plan; History still has it
   }
 
+  const pushable = target?.kind === 'device' || target?.kind === 'multi'
   const allowed = (i) =>
-    i === 0 || (i <= 2 && Boolean(target)) || (i === 3 && Boolean(preview?.ok) && target?.kind === 'device') || (i === 4 && started)
+    i === 0 || (i <= 2 && Boolean(target)) || (i === 3 && Boolean(preview?.ok) && pushable) || (i === 4 && started)
 
   return (
     <>
       <PageHeader title="Configure" subtitle="Requirements → validated commands → safe push with automatic rollback.">
         {target && (
           <span className="row">
-            <Badge tone="info">{target.name}</Badge>
+            <Badge tone="info">{target.kind === 'multi' ? target.names.join(', ') : target.name}</Badge>
             {target.production && <Badge tone="danger">production</Badge>}
             {SUPPORT[target.support] && <Badge tone={SUPPORT[target.support].tone}>{SUPPORT[target.support].label}</Badge>}
           </span>
         )}
       </PageHeader>
       <div className="stack">
+        <ConfigureTabs />
         <Steps step={step} setStep={(i) => (i === 2 ? runPreview() : setStep(i))} allowed={allowed} />
 
         {step === 0 && <DeviceStep target={target} setTarget={chooseTarget} />}
@@ -313,7 +364,9 @@ export default function Configure() {
               <Alert tone="warning">The {target.os} driver is experimental: check the preview carefully and test in a lab first.</Alert>
             )}
             {Object.keys(errors).length > 0 && <Alert tone="danger">Some fields need attention; they are marked below.</Alert>}
-            <PlanForm form={form} setForm={updateForm} caps={target.capabilities} errors={errors} production={target.production} portHint={portHint} />
+            <TemplateBar form={form} setForm={updateForm} osId={target.model.os_driver?.id || target.model.os_id} />
+            <PlanForm form={form} setForm={updateForm} caps={target.capabilities} errors={errors} production={target.production} portHint={portHint}
+              category={target.kind === 'multi' ? null : target.model.category} />
             <div className="form-actions">
               <button type="button" className="btn" onClick={() => setStep(0)}>Back</button>
               <button type="button" className="btn primary" onClick={runPreview}>Preview commands</button>
@@ -323,14 +376,14 @@ export default function Configure() {
 
         {step === 2 && (
           <>
-            <PreviewStep preview={preview} error={previewError} loading={loading} onRetry={runPreview} goFix={goFix} />
+            <PreviewStep preview={preview} multi={target?.kind === 'multi'} error={previewError} loading={loading} onRetry={runPreview} goFix={goFix} />
             <div className="form-actions">
               <button type="button" className="btn" onClick={() => setStep(1)}>Edit requirements</button>
-              <button type="button" className="btn primary" disabled={!preview?.ok || target?.kind !== 'device'} onClick={() => setStep(3)}>
+              <button type="button" className="btn primary" disabled={!preview?.ok || !pushable} onClick={() => setStep(3)}>
                 <CheckCircle2 size={18} aria-hidden="true" /> Continue
               </button>
             </div>
-            {preview?.ok && target?.kind !== 'device' && (
+            {preview?.ok && target?.kind === 'model' && (
               <Alert tone="info">This was a catalog preview. Add the device to the inventory to push it.</Alert>
             )}
           </>
@@ -339,16 +392,11 @@ export default function Configure() {
         {step === 3 && target && (job ? (
           <JobView job={job} setJob={setJob} />
         ) : (
-          <CreateJob target={target} plan={toPlan(form)} onCreated={(j) => { setJob(j); setJobId(j.id) }} />
+          <CreateChange target={target} plan={toPlan(form)} onCreated={(j) => { setJob(j); setJobId(j.id) }} />
         ))}
         {step === 4 && job && (
-          <>
-            <JobView job={job} setJob={setJob} />
-            <div className="form-actions">
-              <Link className="btn" to={`/history/${job.id}`}><History size={18} aria-hidden="true" /> Open in History</Link>
-              <button type="button" className="btn primary" onClick={() => { resetJob(); setPreview(null); setStep(1) }}>New change for this device</button>
-            </div>
-          </>
+          <FinishedJob job={job} setJob={setJob} onAgain={() => { resetJob(); setPreview(null); setStep(1) }}
+            again={target?.kind === 'multi' ? 'New change for these switches' : 'New change for this device'} />
         )}
       </div>
     </>

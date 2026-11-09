@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Ban, CheckCircle2, Circle, CircleX, Loader2, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { post } from '../lib/api.js'
 import { useAuth } from '../lib/auth.jsx'
-import { CANCELLABLE, NOTE_HINT, NOTE_PATTERN, isRunning, phaseStates, statusLabel, statusTone } from '../lib/jobs.js'
+import { KIND, NOTE_HINT, NOTE_PATTERN, canCancel, deviceNames, isRunning, isTerminal, phaseStates, statusLabel, statusTone } from '../lib/jobs.js'
 import CodeBlock from './CodeBlock.jsx'
 import RunForm from './RunForm.jsx'
 import { Alert, Badge, ErrorNote, Field, Panel, formatDate } from './ui.jsx'
@@ -13,9 +13,11 @@ export function StatusBadge({ status }) {
   return <Badge tone={statusTone(status)} dot={isRunning(status)}>{statusLabel(status)}</Badge>
 }
 
-export function JobProgress({ job }) {
-  const phases = phaseStates(job)
-  const rolling = job.steps[0].timeline.some((t) => t.state === 'rolling_back')
+export function JobProgress({ job, index = 0 }) {
+  const phases = phaseStates(job, index)
+  const step = job.steps[index]
+  const status = step.status
+  const rolling = step.timeline.some((t) => t.state === 'rolling_back')
   return (
     <ol className="progress-list" aria-label="Push progress">
       {phases.map(({ id, label, state }) => {
@@ -29,8 +31,8 @@ export function JobProgress({ job }) {
         )
       })}
       {rolling && (
-        <li className={job.status === 'rolling_back' ? 'active' : job.status === 'rolled_back' ? 'done' : 'failed'}>
-          {job.status === 'rolling_back' ? <Loader2 size={18} aria-hidden="true" className="spin" /> : job.status === 'rolled_back' ? <CheckCircle2 size={18} aria-hidden="true" /> : <CircleX size={18} aria-hidden="true" />}
+        <li className={status === 'rolling_back' ? 'active' : status === 'rolled_back' ? 'done' : 'failed'}>
+          {status === 'rolling_back' ? <Loader2 size={18} aria-hidden="true" className="spin" /> : status === 'rolled_back' ? <CheckCircle2 size={18} aria-hidden="true" /> : <CircleX size={18} aria-hidden="true" />}
           <span>Roll back to the previous configuration</span>
         </li>
       )}
@@ -38,16 +40,16 @@ export function JobProgress({ job }) {
   )
 }
 
-function Outcome({ job }) {
-  const step = job.steps[0]
+function Outcome({ job, step }) {
   const err = step.error
-  if (job.status === 'success') {
+  const status = step.status
+  if (status === 'success') {
     return <Alert tone="success" title="Done.">The change was applied, verified{job.plan?.save === false ? '' : ' and saved'}.</Alert>
   }
-  if (!err && !['failed', 'blocked', 'rolled_back'].includes(job.status)) return null
-  const title = { blocked: 'Blocked – nothing was sent.', rolled_back: 'Rolled back.', failed: 'Failed.' }[job.status] || 'Problem.'
+  if (!err && !['failed', 'blocked', 'rolled_back'].includes(status)) return null
+  const title = { blocked: 'Blocked – nothing was sent.', rolled_back: 'Rolled back.', failed: 'Failed.' }[status] || 'Problem.'
   return (
-    <Alert tone={job.status === 'rolled_back' ? 'warning' : 'danger'} title={title}>
+    <Alert tone={status === 'rolled_back' ? 'warning' : 'danger'} title={title}>
       {err?.message}
       {err?.command && <> <br />Command: <code>{err.command}</code></>}
     </Alert>
@@ -65,8 +67,8 @@ function Checks({ checks }) {
         <tbody>
           {checks.map((c, i) => (
             <tr key={i}>
-              <td>{c.name}{!c.required && <span className="faint"> (info)</span>}</td>
-              <td><Badge tone={c.ok ? 'success' : c.required ? 'danger' : 'warning'}>{c.ok ? 'pass' : 'fail'}</Badge></td>
+              <td>{c.name}{c.required === false && <span className="faint"> (info)</span>}</td>
+              <td><Badge tone={c.ok ? 'success' : c.required === false ? 'warning' : 'danger'}>{c.ok ? 'pass' : 'fail'}</Badge></td>
               <td className="faint">{c.detail}</td>
             </tr>
           ))}
@@ -99,8 +101,9 @@ function Approval({ job, setJob }) {
   return (
     <div className="stack">
       <Alert tone="warning" title="Waiting for a second person.">
-        This device is tagged production, so an admin other than {job.requested_by.username} must approve it before
-        it can run. The request expires {formatDate(job.approval.expires_at)}.
+        {job.steps.length > 1 ? 'A device in this job is' : 'This device is'} tagged production, so an admin other
+        than {job.requested_by.username} must approve it before it can run. The request
+        expires {formatDate(job.approval.expires_at)}.
       </Alert>
       {can('admin') && !own && (
         <div className="stack">
@@ -123,14 +126,37 @@ function Approval({ job, setJob }) {
   )
 }
 
+/** Several devices: pick which one the panels below show. */
+function StepPicker({ job, index, setIndex }) {
+  return (
+    <div className="choice-grid" role="group" aria-label="Devices in this job">
+      {job.steps.map((s, i) => (
+        <button type="button" key={`${s.device_id}-${i}`} className="choice" aria-pressed={i === index} onClick={() => setIndex(i)}>
+          <strong>{s.role ? `${s.role} · ` : ''}{s.device_name}</strong>
+          <small>{s.mgmt_ip || s.connection}</small>
+          <StatusBadge status={s.status} />
+        </button>
+      ))}
+    </div>
+  )
+}
+
 /** Everything about one job: approval, credentials form, live progress, result, commands and output. */
 export default function JobView({ job, setJob }) {
   const { user, can } = useAuth()
   const [error, setError] = useState(null)
-  const step = job.steps[0]
+  const [picked, setPicked] = useState(null)
+  const many = job.steps.length > 1
+  // Follow the device being changed until the user picks one.
+  const index = picked ?? Math.max(0, job.steps.findIndex((s) => isRunning(s.status)))
+  const step = job.steps[index] || job.steps[0]
   const mine = job.requested_by.id === user?.id || can('admin')
-  const started = step.timeline.some((t) => t.state === 'queued')
+  const started = job.steps.some((s) => s.timeline.some((t) => t.state === 'queued'))
   const commands = step.commands_sent?.length ? step.commands_sent : step.commands || []
+  const [backupOpen, setBackupOpen] = useState(false)
+  const outputLines = useMemo(() => (step.output || '').split('\n'), [step.output])
+  const backupLines = useMemo(() => (step.backup || '').split('\n'), [step.backup])
+  const title = deviceNames(job, job.steps.length)
 
   async function cancel() {
     setError(null)
@@ -144,14 +170,14 @@ export default function JobView({ job, setJob }) {
   return (
     <div className="stack">
       <Panel
-        title={step.device_name}
-        subtitle={`Requested by ${job.requested_by.username} · ${formatDate(job.created_at)}${job.approval?.approved_by ? ` · approved by ${job.approval.approved_by.username}` : ''}`}
+        title={title}
+        subtitle={`${KIND[job.kind]} · requested by ${job.requested_by.username} · ${formatDate(job.created_at)}${job.approval?.approved_by ? ` · approved by ${job.approval.approved_by.username}` : ''}`}
         actions={
           <>
             <StatusBadge status={job.status} />
-            {mine && can('engineer') && CANCELLABLE.includes(job.status) && (
+            {mine && can('engineer') && canCancel(job) && (
               <button type="button" className="btn small" onClick={cancel}>
-                <Ban size={16} aria-hidden="true" /> {started ? 'Cancel' : 'Withdraw'}
+                <Ban size={16} aria-hidden="true" /> {started ? (job.kind === 'multi' ? 'Stop the remaining switches' : 'Cancel') : 'Withdraw'}
               </button>
             )}
           </>
@@ -164,14 +190,17 @@ export default function JobView({ job, setJob }) {
           ) : (
             <Alert tone="info">Ready – waiting for {job.requested_by.username} to run it.</Alert>
           ))}
-          {job.status === 'cancelled' && (
+          {job.status === 'cancelled' && !started && (
             <Alert tone="info">
               {job.cancel_reason === 'rejected' ? `Rejected by ${job.rejected_by?.username}${job.reject_note ? `: ${job.reject_note}` : '.'}` : 'Withdrawn by the requester. Nothing was sent to the device.'}
             </Alert>
           )}
           {job.status === 'expired' && <Alert tone="info">Not approved within 24 hours. Create a new job if it is still needed.</Alert>}
-          {started && <JobProgress job={job} />}
-          <Outcome job={job} />
+          {job.summary && <p className="muted" style={{ margin: 0 }}>{job.summary}</p>}
+          {many && <StepPicker job={job} index={index} setIndex={setPicked} />}
+          {many && <h3 style={{ margin: 0 }}>{step.role ? `Side ${step.role}: ` : ''}{step.device_name}</h3>}
+          {step.timeline.some((t) => t.state === 'connecting') && <JobProgress job={job} index={index} />}
+          {started && <Outcome job={job} step={step} />}
           {step.notes?.length > 0 && (
             <ul className="stack" style={{ margin: 0, paddingLeft: 'var(--space-5)' }} aria-label="Notes">
               {step.notes.map((n, i) => <li key={i} className={n.includes('MANUAL ACTION') ? 'text-danger' : 'muted'}>{n}</li>)}
@@ -181,30 +210,37 @@ export default function JobView({ job, setJob }) {
         </div>
       </Panel>
 
+      {job.link_checks?.length > 0 && (
+        <Panel title="Both sides match" subtitle="Checked on the two plans before anything is sent.">
+          <Checks checks={job.link_checks} />
+        </Panel>
+      )}
+
       {step.checks?.length > 0 && (
-        <Panel title="Verification" subtitle="Parsed from the show commands after applying.">
+        <Panel title="Verification" subtitle={`${many ? `${step.device_name}: ` : ''}parsed from the show commands after applying.`}>
           <Checks checks={step.checks} />
         </Panel>
       )}
 
       <div className="grid two">
-        <Panel title="Commands" subtitle="Secrets masked.">
+        <Panel title="Commands" subtitle={`${many ? `${step.device_name} · ` : ''}secrets masked.`}>
           <CodeBlock lines={commands} label={`${commands.length} configuration commands`} />
           {step.warnings?.length > 0 && step.warnings.map((w) => <Alert key={w} tone="warning">{w}</Alert>)}
         </Panel>
         <Panel title="Device session" subtitle="Everything sent and received (masked).">
           {step.output ? (
-            <details open={isRunning(job.status) || ['failed', 'rolled_back', 'blocked'].includes(job.status)}>
+            <details open={isRunning(step.status) || ['failed', 'rolled_back', 'blocked'].includes(step.status)}>
               <summary>Show the session transcript</summary>
-              <CodeBlock lines={step.output.split('\n')} label="Transcript" />
+              <CodeBlock lines={outputLines} label="Transcript" />
             </details>
           ) : (
-            <p className="faint">{started ? 'Waiting for the device…' : 'Nothing has been sent yet.'}</p>
+            <p className="faint">{started ? (isTerminal(step.status) ? 'Not started on this device.' : 'Waiting for the device…') : 'Nothing has been sent yet.'}</p>
           )}
           {step.backup && (
-            <details>
-              <summary>Show the backup taken before the change ({step.backup.split('\n').length} lines)</summary>
-              <CodeBlock lines={step.backup.split('\n')} label="Running config backup (masked)" />
+            <details onToggle={(e) => setBackupOpen(e.currentTarget.open)}>
+              <summary>Show the backup taken before the change ({backupLines.length} lines)</summary>
+              {/* A running config has thousands of lines: rendered only while open, not on every poll. */}
+              {backupOpen && <CodeBlock lines={backupLines} label="Running config backup (masked)" />}
             </details>
           )}
         </Panel>

@@ -20,12 +20,12 @@ MAX_TRUNK_LIST_CHARS = 240
 FEATURE_PATHS = {
     "vlans": "vlans", "access": "access", "trunk": "trunks", "svi": "svis", "routed_if": "interfaces",
     "dhcp": "dhcp", "nat": "nat", "static": "statics", "ospf": "routing.ospf", "eigrp": "routing.eigrp",
-    "bgp": "routing.bgp", "ssh": "ssh",
+    "bgp": "routing.bgp", "ssh": "ssh", "default_gateway": "default_gateway",
 }
 FEATURE_LABELS = {
     "vlans": "VLANs", "access": "Access ports", "trunk": "Trunks", "svi": "VLAN interfaces (SVIs)",
     "routed_if": "Routed interfaces", "dhcp": "DHCP server", "nat": "NAT", "static": "Static routes",
-    "ospf": "OSPF", "eigrp": "EIGRP", "bgp": "BGP", "ssh": "SSH",
+    "ospf": "OSPF", "eigrp": "EIGRP", "bgp": "BGP", "ssh": "SSH", "default_gateway": "Management default gateway",
 }
 
 
@@ -302,6 +302,18 @@ def validate_plan(plan: ConfigPlan, *, model: ModelInfo, capabilities: set[str],
         if net is not None and key in seen_routes:
             r.error(f"statics.{s_i}.prefix", f"duplicate route (also statics.{seen_routes[key]})")
         seen_routes.setdefault(key, s_i)
+
+    # Default gateway (management traffic of a Layer 2 switch)
+    if plan.default_gateway:
+        gw = _host(r, "default_gateway", plan.default_gateway)
+        if model.category != "switch":
+            r.error("default_gateway", "only Layer 2 switches use a default gateway; on routers and Layer 3 "
+                                       "switches add a static route 0.0.0.0/0 instead")
+        elif gw is not None:
+            if str(gw) in own_ips:
+                r.error("default_gateway", "the gateway is this device's own address")
+            elif subnets and not any(gw in net for _, net in subnets):
+                r.error("default_gateway", "the gateway must be inside the subnet of a VLAN interface in this plan")
 
     # Routing protocols
     rt = plan.routing

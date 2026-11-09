@@ -1,9 +1,17 @@
-"""Push jobs: approval, credentials vault, background runner (docs/SYSTEM_DESIGN.md 5.1–5.5).
+"""Push jobs: approval, credentials vault, background runner (docs/SYSTEM_DESIGN.md 5.1–5.7).
 
 Lifecycle:  POST /jobs ─► awaiting_approval (production) ─approve─► ready ─run(+credentials)─► queued ─► push
                      └──► ready (lab device)
 Credentials are accepted only by run(), only from "ready", and live only in the in-memory Vault until the
 job finishes (removed in a ``finally`` block). Nothing secret is ever written to MongoDB.
+
+A job has one step per device. Four kinds (services/wizards.py builds them):
+  push       one device
+  multi      the same plan on 2–20 switches, one after another (stops at the first failure by default)
+  link       both ends of a router link: A and B are applied and verified, then confirmed together;
+             if either side fails, the other is rolled back too
+  bootstrap  first-time setup over a console, then an SSH test login; only if it works does the device
+             switch to SSH
 """
 
 import hashlib
@@ -12,12 +20,13 @@ import logging
 import threading
 from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor
-from dataclasses import dataclass
+from contextlib import ExitStack
 from datetime import timedelta
 
 from bson import ObjectId
 from pymongo import ReturnDocument
 from pymongo.database import Database
+from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from .. import clock
 from ..config import Settings
@@ -28,17 +37,19 @@ from ..models.common import oid
 from ..models.job import CANCELLABLE, RUNNING, TERMINAL, JobCreate, RunRequest
 from ..models.plan import ConfigPlan
 from ..security.sessions import SessionUser
-from . import audit, planning, validation
-from .connection import ConnectParams
+from . import audit, validation, wizards
+from .connection import ConnectFailed, ConnectParams
 from .hostkeys import Connector
-from .push import PushEngine, StepInput
+from .push import MANUAL, Held, PushEngine, StepInput, StepResult
 
 log = logging.getLogger("netconfig.jobs")
 APPROVAL_HOURS = 24
 INTERRUPTED = ("Interrupted (the app stopped) – verify the device state. "
                "A Cisco device restores its old config by its revert timer.")
+SKIPPED = "cancelled"  # a step that never started (an earlier step failed, or the job was withdrawn)
 
-# Allowed status changes (tests/unit/test_job_states.py checks this table).
+# Allowed status changes of one step (tests/unit/test_job_states.py checks this table). The job status
+# follows its active step while running; before and after, every step has the job's status.
 TRANSITIONS: dict[str, set[str]] = {
     "awaiting_approval": {"ready", "cancelled", "expired"},
     "ready": {"queued", "cancelled"},
@@ -58,23 +69,19 @@ def can_move(src: str, dst: str) -> bool:
     return dst in TRANSITIONS.get(src, set())
 
 
-@dataclass
-class RunSecrets:
-    request: RunRequest
-
-
 class Vault:
-    """job_id → secrets for that run. Memory only; ``pop`` is called in a finally block when the job ends."""
+    """job_id → the run request (login + plan secrets). Memory only; ``pop`` is called in a finally block when
+    the job ends."""
 
     def __init__(self):
-        self._items: dict[str, RunSecrets] = {}
+        self._items: dict[str, RunRequest] = {}
         self._lock = threading.Lock()
 
-    def put(self, job_id: str, item: RunSecrets) -> None:
+    def put(self, job_id: str, req: RunRequest) -> None:
         with self._lock:
-            self._items[job_id] = item
+            self._items[job_id] = req
 
-    def pop(self, job_id: str) -> RunSecrets | None:
+    def pop(self, job_id: str) -> RunRequest | None:
         with self._lock:
             return self._items.pop(job_id, None)
 
@@ -82,13 +89,34 @@ class Vault:
         with self._lock:
             return len(self._items)
 
-    def __contains__(self, job_id: str) -> bool:
-        with self._lock:
-            return job_id in self._items
-
 
 def plan_hash(plan_doc: dict) -> str:
     return hashlib.sha256(json.dumps(plan_doc, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def stored_request(body: JobCreate) -> dict:
+    """The job request as stored (and re-built at /run): the plan's secrets are removed, never masked."""
+    data = body.model_dump(mode="json", exclude={"plan"})
+    data["plan"] = body.plan.without_secrets() if body.plan else None
+    return data
+
+
+def request_of(doc: dict) -> dict:
+    """The stored request; jobs created before Phase 3B only kept device + plan."""
+    return doc.get("request") or {"device_id": str(doc["steps"][0]["device_id"]), "plan": doc["plan"],
+                                  "note": doc.get("note", "")}
+
+
+def aggregate(statuses: list[str]) -> str:
+    """Job status from its step statuses (docs/SYSTEM_DESIGN.md 5.4)."""
+    if all(s == "success" for s in statuses):
+        return "success"
+    if "success" in statuses:
+        return "failed"  # partly applied: some devices changed, others not
+    for s in ("failed", "rolled_back", "blocked"):
+        if s in statuses:
+            return s
+    return "cancelled"
 
 
 def _who(doc: dict) -> SessionUser:
@@ -96,47 +124,83 @@ def _who(doc: dict) -> SessionUser:
     return SessionUser(session_id="", user_id=r["id"], username=r["username"], role="engineer")
 
 
-# ------------------------------------------------------------------ service API
-def create(db: Database, settings: Settings, user: SessionUser, body: JobCreate, request_id: str) -> dict:
-    p = planning.prepare(db, settings, body.plan, device_id=body.device_id)
-    if not p.ok:
-        raise ApiError(422, "The plan is not valid for this device.", fields=p.errors)
-    if p.device.get("connection", {}).get("method", "none") == "none":
-        raise ApiError(422, "This device has no connection method.",
-                       fields={"device_id": "set SSH, serial or lab console"})
-    if p.production and p.driver_doc.get("support") == "experimental" and not settings.enable_experimental_drivers:
-        raise ApiError(422, "Experimental driver on a production device.", fields={
-            "device_id": f"{p.driver.os_name} is experimental (not lab-tested). Production pushes need "
-                         "ENABLE_EXPERIMENTAL_DRIVERS=true."})
+def _failed_update(message: str) -> dict:
+    """Job → failed; every step that has not finished yet → failed with ``message`` (array filter ``s``)."""
     now = clock.now()
-    stored_plan = p.plan.without_secrets()
+    return {"$set": {"status": "failed", "finished_at": now, "updated_at": now, "summary": message,
+                     "steps.$[s].status": "failed", "steps.$[s].error": {"command": None, "message": message}},
+            "$push": {"steps.$[s].timeline": {"state": "failed", "at": now}}}
+
+
+def _step_doc(b: wizards.BuiltStep, status: str, now) -> dict:
+    p = b.prepared
+    return {
+        "device_id": p.device["_id"], "device_name": p.device["name"], "role": b.role, "os_id": p.model["os_id"],
+        "connection": p.device.get("connection", {}).get("method"), "mgmt_ip": p.device.get("mgmt_ip"),
+        "status": status, "plan": p.plan.without_secrets(), "commands": p.commands,
+        "commands_hash": p.commands_hash, "verify_commands": p.verify_commands, "warnings": p.warnings,
+        "timeline": [{"state": status, "at": now}], "backup": "", "output": "", "checks": [], "error": None,
+        "notes": [], "mgmt_interface": None, "started_at": None, "finished_at": None,
+    }
+
+
+# ------------------------------------------------------------------ service API
+def preview(db: Database, settings: Settings, body: JobCreate) -> dict:
+    """What POST /jobs would create, without creating it (the wizards' preview step)."""
+    b = wizards.build(db, settings, body)
+    return {
+        "ok": b.ok, "kind": b.kind, "errors": b.errors, "warnings": b.warnings, "checks": b.checks,
+        "production": b.production, "bootstrap": b.bootstrap,
+        "steps": [{"device_id": str(s.prepared.device["_id"]), "device_name": s.prepared.device["name"],
+                   "role": s.role, "ok": s.prepared.ok, "commands": s.prepared.commands,
+                   "verify_commands": s.prepared.verify_commands, "warnings": s.prepared.warnings,
+                   "commands_hash": s.prepared.commands_hash if s.prepared.ok else None,
+                   "revert_minutes": s.prepared.plan.revert_minutes} for s in b.steps if s.prepared.device],
+    }
+
+
+def create(db: Database, settings: Settings, user: SessionUser, body: JobCreate, request_id: str) -> dict:
+    b = wizards.build(db, settings, body)
+    if not b.ok:
+        raise ApiError(422, "The plan is not valid for this device." if b.kind == "push"
+                       else "The request is not valid.", fields=b.errors)
+    for s in b.steps:
+        p = s.prepared
+        if p.device.get("connection", {}).get("method", "none") == "none":
+            raise ApiError(422, f"{p.device['name']} has no connection method.",
+                           fields={"device_id": "set SSH, serial or lab console"})
+        if p.production and p.driver_doc.get("support") == "experimental" and not settings.enable_experimental_drivers:
+            raise ApiError(422, "Experimental driver on a production device.", fields={
+                "device_id": f"{p.driver.os_name} is experimental (not lab-tested). Production pushes need "
+                             "ENABLE_EXPERIMENTAL_DRIVERS=true."})
+    now = clock.now()
+    status = "awaiting_approval" if b.production else "ready"
+    request = stored_request(body)
+    steps = [_step_doc(s, status, now) for s in b.steps]
     doc = {
-        "kind": "push",
-        "status": "awaiting_approval" if p.production else "ready",
+        "kind": b.kind,
+        "status": status,
         "requested_by": {"id": user.user_id, "username": user.username},
-        "approval": {"required": p.production,
-                     "expires_at": now + timedelta(hours=APPROVAL_HOURS) if p.production else None,
+        "approval": {"required": b.production,
+                     "expires_at": now + timedelta(hours=APPROVAL_HOURS) if b.production else None,
                      "approved_by": None, "approved_at": None},
         "cancel_reason": None,
         "note": body.note,
-        "plan": stored_plan,
-        "plan_hash": plan_hash(stored_plan),
-        "steps": [{
-            "device_id": p.device["_id"], "device_name": p.device["name"], "os_id": p.model["os_id"],
-            "connection": p.device.get("connection", {}).get("method"), "mgmt_ip": p.device.get("mgmt_ip"),
-            "status": None, "commands": p.commands, "commands_hash": p.commands_hash,
-            "verify_commands": p.verify_commands, "warnings": p.warnings,
-            "timeline": [], "backup": "", "output": "", "checks": [], "error": None, "notes": [],
-            "mgmt_interface": None, "started_at": None, "finished_at": None,
-        }],
+        "request": request,
+        "plan": steps[0]["plan"],  # the (first) device's plan; every step also keeps its own
+        "plan_hash": plan_hash(request),
+        "link_checks": b.checks,
+        "bootstrap": b.bootstrap,
+        "stop_on_failure": body.stop_on_failure,
+        "summary": None,
+        "steps": steps,
         "created_at": now, "updated_at": now, "finished_at": None,
     }
-    doc["steps"][0]["status"] = doc["status"]
-    doc["steps"][0]["timeline"].append({"state": doc["status"], "at": now})
     doc["_id"] = db.jobs.insert_one(doc).inserted_id
     audit.record(db, "job.create", who=user, target={"type": "job", "id": str(doc["_id"])},
-                 details={"device": p.device["name"], "status": doc["status"], "plan_hash": doc["plan_hash"],
-                          "commands_hash": p.commands_hash}, request_id=request_id)
+                 details={"kind": b.kind, "devices": [s["device_name"] for s in steps], "status": status,
+                          "plan_hash": doc["plan_hash"], "commands_hash": [s["commands_hash"] for s in steps]},
+                 request_id=request_id)
     return doc
 
 
@@ -148,16 +212,17 @@ def get(db: Database, job_id: str) -> dict:
 
 
 def _move(db: Database, job_id: ObjectId, sources: tuple[str, ...], target: str,
-          extra: dict | None = None) -> dict | None:
-    """Atomic status change: succeeds only if the job is still in one of ``sources``."""
+          extra: dict | None = None, match: dict | None = None) -> dict | None:
+    """Atomic status change of the whole job (all steps) before it runs: succeeds only if the job is still in
+    one of ``sources`` (and still matches ``match``)."""
     if not all(can_move(s, target) for s in sources):
         raise ValueError(f"illegal job transition {sources} -> {target}")
     now = clock.now()
-    update = {"$set": {"status": target, "steps.0.status": target, "updated_at": now, **(extra or {})},
-              "$push": {"steps.0.timeline": {"state": target, "at": now}}}
+    update = {"$set": {"status": target, "steps.$[].status": target, "updated_at": now, **(extra or {})},
+              "$push": {"steps.$[].timeline": {"state": target, "at": now}}}
     if target in TERMINAL:
         update["$set"]["finished_at"] = now
-    return db.jobs.find_one_and_update({"_id": job_id, "status": {"$in": list(sources)}}, update,
+    return db.jobs.find_one_and_update({"_id": job_id, "status": {"$in": list(sources)}, **(match or {})}, update,
                                        return_document=ReturnDocument.AFTER)
 
 
@@ -180,17 +245,13 @@ def approve(db: Database, user: SessionUser, job_id: str, request_id: str) -> di
     if now >= doc["approval"]["expires_at"]:
         expire_sweep(db)
         raise ApiError(409, "This request expired (not approved within 24 hours).")
-    new = db.jobs.find_one_and_update(
-        {"_id": doc["_id"], "status": "awaiting_approval", "approval.expires_at": {"$gt": now},
-         "plan_hash": doc["plan_hash"]},
-        {"$set": {"status": "ready", "steps.0.status": "ready", "updated_at": now,
-                  "approval.approved_by": {"id": user.user_id, "username": user.username}, "approval.approved_at": now},
-         "$push": {"steps.0.timeline": {"state": "ready", "at": now}}},
-        return_document=ReturnDocument.AFTER)
+    new = _move(db, doc["_id"], ("awaiting_approval",), "ready",
+                {"approval.approved_by": {"id": user.user_id, "username": user.username}, "approval.approved_at": now},
+                match={"approval.expires_at": {"$gt": now}, "plan_hash": doc["plan_hash"]})
     if not new:
         raise ApiError(409, "The job changed while you were approving it; reload and try again.")
     audit.record(db, "job.approve", who=user, target={"type": "job", "id": job_id},
-                 details={"plan_hash": doc["plan_hash"], "commands_hash": doc["steps"][0]["commands_hash"]},
+                 details={"plan_hash": doc["plan_hash"], "commands_hash": [s["commands_hash"] for s in doc["steps"]]},
                  request_id=request_id)
     return new
 
@@ -273,11 +334,8 @@ class JobRunner:
         """Jobs left running by a crash or restart → failed. Cisco devices have reverted by their timer."""
         n = 0
         for doc in self.db.jobs.find({"status": {"$in": list(RUNNING)}}, {"_id": 1, "status": 1}):
-            now = clock.now()
-            self.db.jobs.update_one({"_id": doc["_id"], "status": doc["status"]}, {
-                "$set": {"status": "failed", "steps.0.status": "failed", "finished_at": now, "updated_at": now,
-                         "steps.0.error": {"command": None, "message": INTERRUPTED}},
-                "$push": {"steps.0.timeline": {"state": "failed", "at": now}}})
+            self.db.jobs.update_one({"_id": doc["_id"], "status": doc["status"]}, _failed_update(INTERRUPTED),
+                                    array_filters=[{"s.status": {"$in": list(RUNNING)}}])
             audit.record(self.db, "job.interrupted", result="failed", target={"type": "job", "id": str(doc["_id"])})
             n += 1
         return n
@@ -288,36 +346,51 @@ class JobRunner:
         _owner_or_admin(doc, user)
         if doc["status"] != "ready":
             raise ApiError(409, f"Only a ready job can be run (status: {doc['status']}).")
-        step = doc["steps"][0]
-        device = self.db.devices.find_one({"_id": step["device_id"]})
-        if not device:
-            raise ApiError(409, "The device was removed from the inventory.")
-        # Approval binding: the commands must still be exactly what was previewed (and approved).
-        plan = merge_secrets(doc["plan"], req)
-        p = planning.prepare(self.db, self.settings, plan, device_id=str(device["_id"]))
-        if not p.ok or p.commands_hash != step["commands_hash"]:
-            raise ApiError(409, "The device, catalog or plan changed since this job was created; create a new job.")
-        if p.production and not doc["approval"]["required"]:
-            raise ApiError(409, "The device is now tagged production and needs approval; create a new job.")
-        busy = self.db.jobs.find_one({"_id": {"$ne": doc["_id"]}, "steps.device_id": device["_id"],
-                                      "status": {"$in": list(RUNNING)}}, {"_id": 1})
+        devices = [self.db.devices.find_one({"_id": s["device_id"]}) for s in doc["steps"]]
+        if not all(devices):
+            raise ApiError(409, "A device of this job was removed from the inventory.")
+        missing = {}
+        for device in devices:
+            if device.get("connection", {}).get("method") == "ssh" and req.login_for(str(device["_id"]))[0] is None:
+                missing["username"] = f"required: {device['name']} is reached over SSH"
+        if missing:
+            raise ApiError(422, "The device login is missing.", fields=missing)
+        # Approval binding: rebuild from the stored request; the commands must still be exactly what was
+        # previewed (and approved) for every device.
+        built = wizards.build(self.db, self.settings, JobCreate.model_validate(request_of(doc)))
+        hashes = [s.prepared.commands_hash for s in built.steps]
+        if not built.ok or hashes != [s["commands_hash"] for s in doc["steps"]]:
+            raise ApiError(409, "A device, the catalog or the plan changed since this job was created; "
+                                "create a new job.")
+        if built.production and not doc["approval"]["required"]:
+            raise ApiError(409, "A device is now tagged production and needs approval; create a new job.")
+        for s in doc["steps"]:
+            merge_secrets(s.get("plan") or doc["plan"], req)  # fail now (422) rather than in the background
+        busy = self.db.jobs.find_one({"_id": {"$ne": doc["_id"]}, "status": {"$in": list(RUNNING)},
+                                      "steps.device_id": {"$in": [d["_id"] for d in devices]}}, {"_id": 1})
         if busy:
-            raise ApiError(409, "Another job is running on this device; wait for it to finish.")
+            raise ApiError(409, "Another job is running on one of these devices; wait for it to finish.")
         # Status first, credentials second: if the transition fails they never reach the vault.
         new = _move(self.db, doc["_id"], ("ready",), "queued",
                     {"run_by": {"id": user.user_id, "username": user.username}})
         if not new:
             raise ApiError(409, "The job is no longer ready.")
-        self.vault.put(job_id, RunSecrets(req))
+        self.vault.put(job_id, req)
         audit.record(self.db, "job.run", who=user, target={"type": "job", "id": job_id},
-                     details={"device": device["name"], "commands_hash": step["commands_hash"]}, request_id=request_id)
-        self.futures[job_id] = self.executor.submit(self._execute, job_id)
+                     details={"kind": doc["kind"], "devices": [d["name"] for d in devices],
+                              "commands_hash": [s["commands_hash"] for s in doc["steps"]]}, request_id=request_id)
+        fut = self.executor.submit(self._execute, job_id)
+        self.futures[job_id] = fut
+        fut.add_done_callback(lambda _: self.futures.pop(job_id, None))
         return new
 
     def cancel(self, user: SessionUser, job_id: str, request_id: str) -> dict:
         doc = get(self.db, job_id)
         _owner_or_admin(doc, user)
-        if doc["status"] not in CANCELLABLE:
+        # Several switches: also while running. Switches not started yet are skipped; the switch in progress
+        # stops too if no configuration command was sent to it yet, otherwise it is finished first.
+        allowed = CANCELLABLE + (RUNNING if doc.get("kind") == "multi" else ())
+        if doc["status"] not in allowed:
             raise ApiError(409, f"A job that is {doc['status']} cannot be cancelled (it is applying or finished).")
         if doc["status"] in ("awaiting_approval", "ready"):
             new = _move(self.db, doc["_id"], (doc["status"],), "cancelled", {"cancel_reason": "withdrawn"})
@@ -338,83 +411,275 @@ class JobRunner:
     def _execute(self, job_id: str) -> None:
         _id = ObjectId(job_id)
         try:
-            secrets = self.vault.pop(job_id)  # taken out at once: the vault never outlives the run
+            req = self.vault.pop(job_id)  # taken out at once: the vault never outlives the run
             doc = self.db.jobs.find_one({"_id": _id})
-            if secrets is None or doc is None:
-                self._finish(_id, "failed", {"error": {"command": None, "message": "Credentials missing (restart?)."}})
+            if req is None or doc is None:
+                self._fail_job(_id, "Credentials missing (restart?).")
                 return
-            step = doc["steps"][0]
-            with self.device_locks[str(step["device_id"])]:
-                self._push(doc, secrets.request)
+            with ExitStack() as stack:
+                # Sorted, so two jobs that share devices always lock them in the same order (no deadlock).
+                for device_id in sorted({str(s["device_id"]) for s in doc["steps"]}):
+                    stack.enter_context(self.device_locks[device_id])
+                Execution(self, doc, req).run()
         except Exception as exc:  # noqa: BLE001 - a job must always reach a terminal state
             log.error("job %s crashed (%s)", job_id, type(exc).__name__)
-            self._finish(_id, "failed",
-                         {"error": {"command": None, "message": f"Internal error ({type(exc).__name__})."}})
+            self._fail_job(_id, f"Internal error ({type(exc).__name__}).")
         finally:
             self.vault.pop(job_id)
             self.cancel_requests.discard(job_id)
 
-    def _push(self, doc: dict, req: RunRequest) -> None:
-        _id, step = doc["_id"], doc["steps"][0]
-        job_id = str(_id)
-        device = self.db.devices.find_one({"_id": step["device_id"]})
-        model = self.db.catalog_models.find_one({"_id": device["model_id"]})
-        driver = get_driver(model["os_id"], ModelInfo.from_doc(model), self.settings)
-        plan = merge_secrets(doc["plan"], req)
-        plan = validation.normalize_interfaces(plan, driver.normalize_interface)
-        conn = device.get("connection", {})
-        method = conn.get("method")
-        params = ConnectParams(method=method, device_type=driver.netmiko_device_type, host=device.get("mgmt_ip"),
-                               port=conn.get("port") or (23 if method == "telnet_lab" else 22),
-                               username=req.username, password=req.password, secret=req.enable_secret,
-                               serial_port=conn.get("serial_port"), baud=conn.get("baud") or 9600)
-        secrets = [s for s in (req.password, req.enable_secret, req.ssh_user_password, req.new_enable_secret) if s]
-        who = _who(doc)
-        current = {"status": "queued"}
+    def _fail_job(self, _id: ObjectId, message: str) -> None:
+        self._save(_id, _failed_update(message), array_filters=[{"s.status": {"$nin": list(TERMINAL)}}])
 
-        def on_state(state: str) -> None:
-            moved = _move(self.db, _id, (current["status"],), state,
-                          {"steps.0.started_at": clock.now()} if state == "connecting" else None)
-            if moved:
-                current["status"] = state
-
-        engine = PushEngine(open_connection=lambda prm, notes: self.connector.open(prm, who=who, notes=notes),
-                            on_state=on_state, cancelled=lambda: job_id in self.cancel_requests)
-        result = engine.run(StepInput(driver=driver, plan=plan, params=params, mgmt_ip=device.get("mgmt_ip"),
-                                      secrets=secrets))
-        extra = {"steps.0.commands_sent": result.commands, "steps.0.backup": result.backup,
-                 "steps.0.output": result.output, "steps.0.checks": result.checks, "steps.0.error": result.error,
-                 "steps.0.notes": result.notes, "steps.0.mgmt_interface": result.mgmt_interface,
-                 "steps.0.finished_at": clock.now()}
-        if result.status == "cancelled":
-            extra["cancel_reason"] = "withdrawn"
-        self._finish(_id, result.status, extra, current["status"])
-        audit.record(self.db, f"job.{'rollback' if result.status == 'rolled_back' else 'finish'}",
-                     result="ok" if result.status == "success" else "failed", who=who,
-                     target={"type": "job", "id": job_id},
-                     details={"status": result.status, "device": device["name"], "commands_hash": step["commands_hash"],
-                              "error": result.error})
-        if device.get("_id"):
-            self.db.devices.update_one({"_id": device["_id"]}, {"$set": {
-                "status.reachable": result.status != "failed" or bool(result.backup),  # backup read = it answered
-                "status.checked_at": clock.now(), "status.last_job": {"id": job_id, "status": result.status}}})
-
-    def _finish(self, _id: ObjectId, status: str, extra: dict, current: str | None = None) -> None:
-        now = clock.now()
-        update = {"$set": {"status": status, "steps.0.status": status, "updated_at": now, "finished_at": now,
-                           **{k: v for k, v in extra.items() if not k.startswith("error")}},
-                  "$push": {"steps.0.timeline": {"state": status, "at": now}}}
-        if "error" in extra:
-            update["$set"]["steps.0.error"] = extra["error"]
+    def _save(self, _id: ObjectId, update: dict, array_filters=None) -> None:
         for attempt in range(3):  # the final state matters most: retry if MongoDB blips
             try:
-                self.db.jobs.update_one({"_id": _id}, update)
+                self.db.jobs.update_one({"_id": _id}, update, array_filters=array_filters)
                 return
             except Exception as exc:  # noqa: BLE001
-                log.warning("could not save final job state (attempt %d, %s)", attempt + 1, type(exc).__name__)
+                log.warning("could not save job state (attempt %d, %s)", attempt + 1, type(exc).__name__)
 
 
-def job_out(doc: dict, detail: bool = False) -> dict:
+class Execution:
+    """One run of one job: builds the per-device inputs, runs the steps for the job's kind, stores results."""
+
+    def __init__(self, runner: JobRunner, doc: dict, req: RunRequest):
+        self.r, self.db, self.doc, self.req = runner, runner.db, doc, req
+        self._id = doc["_id"]
+        self.job_id = str(self._id)
+        self.who = _who(doc)
+        self.current = [s["status"] for s in doc["steps"]]  # "queued" for every step
+        self.devices = [self.db.devices.find_one({"_id": s["device_id"]}) for s in doc["steps"]]
+
+    def run(self) -> None:
+        self._finish(self._link() if self.doc["kind"] == "link" else self._in_order())
+
+    def _in_order(self) -> list[StepResult]:
+        """push, multi and bootstrap: one device after another."""
+        results: list[StepResult] = []
+        for i in range(len(self.doc["steps"])):
+            why_not = self._why_not_start(i, results)
+            if why_not:
+                results.append(self._skip(i, why_not))
+                continue
+            try:
+                step = self._input(i)
+            except Exception as exc:  # noqa: BLE001 - e.g. a database error: this device fails, not the whole run
+                res = _internal_error(exc)
+            else:
+                res = self._engine(i).run(step)
+                if self.doc["kind"] == "bootstrap" and res.status == "success":
+                    self._ssh_switch(i, res, step)
+            self._store(i, res)
+            results.append(res)
+        return results
+
+    def _why_not_start(self, i: int, results: list[StepResult]) -> str | None:
+        if i == 0:
+            return None
+        if self.job_id in self.r.cancel_requests:
+            return "Not started: the job was withdrawn."
+        if self.doc.get("stop_on_failure", True) and results[-1].status != "success":
+            return "Not started: an earlier device did not succeed (stop on failure)."
+        login = self._login_key(i)
+        for j, earlier in enumerate(results):
+            if earlier.login_refused and self._login_key(j) == login:
+                # Never keep trying a rejected login: with a shared TACACS/RADIUS account it would get locked.
+                return (f"Not started: {self.doc['steps'][j]['device_name']} refused the login, so the same "
+                        "login is not tried on more devices.")
+        return None
+
+    # -- building blocks
+    def _login(self, i: int):
+        return self.req.login_for(str(self.devices[i]["_id"]))
+
+    def _login_key(self, i: int) -> tuple:
+        """Identifies the login used for device i (compared in memory only, never stored)."""
+        username, password, _ = self._login(i)
+        return username, password.get_secret_value() if password else None
+
+    def _params(self, i: int, driver, **override) -> ConnectParams:
+        """How to reach device i: its inventory connection and this run's login, unless overridden."""
+        device = self.devices[i]
+        conn = device.get("connection", {})
+        username, password, secret = self._login(i)
+        values = {"method": conn.get("method"), "host": device.get("mgmt_ip"), "port": conn.get("port"),
+                  "username": username, "password": password, "secret": secret,
+                  "serial_port": conn.get("serial_port"), "baud": conn.get("baud") or 9600, **override}
+        values["port"] = values["port"] or (23 if values["method"] == "telnet_lab" else 22)
+        return ConnectParams(device_type=driver.netmiko_device_type, **values)
+
+    def _input(self, i: int) -> StepInput:
+        step, device = self.doc["steps"][i], self.devices[i]
+        model = self.db.catalog_models.find_one({"_id": device["model_id"]})
+        driver = get_driver(model["os_id"], ModelInfo.from_doc(model), self.r.settings)
+        plan = validation.normalize_interfaces(merge_secrets(step.get("plan") or self.doc["plan"], self.req),
+                                               driver.normalize_interface)
+        return StepInput(driver=driver, plan=plan, params=self._params(i, driver), mgmt_ip=device.get("mgmt_ip"),
+                         secrets=self.req.all_secrets())
+
+    def _engine(self, i: int) -> PushEngine:
+        def on_state(state: str) -> None:
+            if not can_move(self.current[i], state):
+                return
+            now = clock.now()
+            update = {"$set": {f"steps.{i}.status": state, "status": state, "updated_at": now},
+                      "$push": {f"steps.{i}.timeline": {"state": state, "at": now}}}
+            if state == "connecting":
+                update["$set"][f"steps.{i}.started_at"] = now
+            self.db.jobs.update_one({"_id": self._id}, update)
+            self.current[i] = state
+
+        return PushEngine(open_connection=lambda prm, notes: self.r.connector.open(prm, who=self.who, notes=notes),
+                          on_state=on_state, cancelled=lambda: self.job_id in self.r.cancel_requests)
+
+    def _skip(self, i: int, note: str) -> StepResult:
+        res = StepResult(status=SKIPPED, notes=[note])
+        self._store(i, res)
+        return res
+
+    def _store(self, i: int, res: StepResult) -> None:
+        now = clock.now()
+        p = f"steps.{i}."
+        update = {"$set": {p + "status": res.status, p + "commands_sent": res.commands, p + "backup": res.backup,
+                           p + "output": res.output, p + "checks": res.checks, p + "error": res.error,
+                           p + "notes": res.notes, p + "mgmt_interface": res.mgmt_interface,
+                           p + "finished_at": now, "updated_at": now},
+                  "$push": {p + "timeline": {"state": res.status, "at": now}}}
+        self.r._save(self._id, update)
+        self.current[i] = res.status
+        device = self.devices[i]
+        if res.status != SKIPPED or res.output:
+            self.db.devices.update_one({"_id": device["_id"]}, {"$set": {
+                "status.reachable": res.status != "failed" or bool(res.backup),  # backup read = it answered
+                "status.checked_at": now, "status.last_job": {"id": self.job_id, "status": res.status}}})
+
+    def _finish(self, results: list[StepResult]) -> None:
+        statuses = [r.status for r in results]
+        status = aggregate(statuses)
+        names = [s["device_name"] for s in self.doc["steps"]]
+        if len(results) == 1:
+            summary = None
+        else:
+            done = [n for n, s in zip(names, statuses, strict=True) if s == "success"]
+            summary = f"{len(done)} of {len(results)} devices changed" + (f": {', '.join(done)}." if done else ".")
+        now = clock.now()
+        extra = {"cancel_reason": "withdrawn"} if status == "cancelled" else {}
+        self.r._save(self._id, {"$set": {"status": status, "summary": summary, "finished_at": now, "updated_at": now,
+                                         **extra}})
+        rolled = "rolled_back" in statuses
+        audit.record(self.db, f"job.{'rollback' if rolled else 'finish'}",
+                     result="ok" if status == "success" else "failed", who=self.who,
+                     target={"type": "job", "id": self.job_id},
+                     details={"kind": self.doc["kind"], "status": status,
+                              "steps": [{"device": n, "status": s, "commands_hash": st["commands_hash"],
+                                         "error": r.error} for n, s, st, r in
+                                        zip(names, statuses, self.doc["steps"], results, strict=True)]})
+
+    # -- router link: both sides applied and verified, then both confirmed, then both saved
+    def _link(self) -> list[StepResult]:
+        a_name, b_name = (s["device_name"] for s in self.doc["steps"])
+        engines = [self._engine(0), self._engine(1)]
+        held: dict[int, Held] = {}
+        results: list[StepResult | None] = [None, None]
+        try:
+            for i in (0, 1):
+                out = engines[i].apply(self._input(i))
+                if isinstance(out, StepResult):
+                    results[i] = out
+                    break
+                held[i] = out
+            if results[0] is not None:
+                results[1] = self._skip(1, f"Not started: {a_name} was not changed, so the link is left "
+                                           "untouched on both sides.")
+            elif results[1] is not None:
+                results[0] = engines[0].abort(held.pop(0), f"Rolled back because {b_name} failed, so the link "
+                                                           "stays the same on both sides.")
+            else:
+                # Each confirm cancels that device's revert timer. Both are confirmed before either is saved, so
+                # the moment when one side is kept and the other may still revert is as short as possible.
+                results[0] = engines[0].confirm(held[0])
+                if results[0] is not None:  # A was not confirmed and reverts: roll B back too
+                    del held[0]
+                    results[1] = engines[1].abort(held.pop(1), f"Rolled back because {a_name} could not be "
+                                                               "confirmed, so the link stays the same on both sides.")
+                else:
+                    results[1] = engines[1].confirm(held[1])
+                    if results[1] is not None:
+                        del held[1]
+                    results[0] = engines[0].save(held.pop(0))
+                    if results[1] is None:
+                        results[1] = engines[1].save(held.pop(1))
+                    else:
+                        results[0].notes.append(f"{MANUAL}: {b_name} was not confirmed, so the link is configured "
+                                                f"on {a_name} only. Fix {b_name} or remove the link from {a_name}.")
+        except Exception as exc:  # noqa: BLE001 - e.g. a database error: never leave a side half-done
+            for i in (0, 1):
+                if i in held:
+                    h = held.pop(i)
+                    results[i] = engines[i].save(h) if h.confirmed else \
+                        engines[i].abort(h, "Rolled back after an internal error.")
+                elif results[i] is None:
+                    results[i] = _internal_error(exc)
+        for i in (0, 1):
+            if self.current[i] not in TERMINAL:  # a skipped step is already stored
+                self._store(i, results[i])
+        return results
+
+    # -- bootstrap: prove SSH works before switching the device to it
+    def _ssh_switch(self, i: int, res: StepResult, step: StepInput) -> None:
+        """Runs after the setup was confirmed and saved: whatever happens here is recorded, never raised."""
+        info = self.doc["bootstrap"] or {}
+        device = self.devices[i]
+        new_ip, admin = info.get("mgmt_ip"), info.get("admin_username")
+        name = f"SSH login to {new_ip} as {admin}"
+        notes: list[str] = []  # e.g. "host key stored" on this first SSH contact
+        error = None
+        try:
+            params = self._params(i, step.driver, method="ssh", host=new_ip, port=22, username=admin,
+                                  password=self.req.ssh_user_password, secret=self.req.new_enable_secret,
+                                  serial_port=None)
+            self.r.connector.open(params, who=self.who, notes=notes).close()
+        except ConnectFailed as exc:
+            error = exc.message
+        except Exception as exc:  # noqa: BLE001
+            error = f"Internal error ({type(exc).__name__})."
+        res.notes += [n for n in notes if n not in res.notes]
+        if error:
+            res.checks.append({"name": name, "ok": False, "detail": error, "required": False})
+            res.notes.append(f"The setup is saved, but the SSH test failed, so {device['name']} stays on its console "
+                             "connection. Check the cabling / VLAN to the management network, then edit the device.")
+            return
+        res.checks.append({"name": name, "ok": True, "detail": "logged in", "required": False})
+        try:
+            self.db.devices.update_one({"_id": device["_id"]}, {"$set": {
+                "mgmt_ip": new_ip, "connection": {"method": "ssh", "port": 22, "serial_port": None, "baud": None},
+                "updated_at": clock.now()}})
+        except DuplicateKeyError:
+            res.notes.append(f"SSH works, but {new_ip} is now used by another device in the inventory; "
+                             f"{device['name']} was not switched to SSH.")
+            return
+        except PyMongoError as exc:
+            res.notes.append(f"SSH works, but the inventory could not be updated ({type(exc).__name__}); "
+                             f"edit {device['name']} to use SSH to {new_ip}.")
+            return
+        res.notes.append(f"SSH works: {device['name']} now connects over SSH to {new_ip}.")
+        audit.record(self.db, "device.update", who=self.who, target={"type": "device", "id": str(device["_id"])},
+                     details={"by": "bootstrap", "job": self.job_id, "mgmt_ip": new_ip, "connection": "ssh"})
+
+
+def _internal_error(exc: Exception) -> StepResult:
+    log.error("job step crashed (%s)", type(exc).__name__)
+    return StepResult(status="failed", error={"command": None, "message": f"Internal error ({type(exc).__name__})."})
+
+
+# History list: the large per-step fields (running-config backups, transcripts) are not even read from MongoDB.
+LIST_PROJECTION = {"plan": 0, "request": 0, **{f"steps.{k}": 0 for k in (
+    "backup", "output", "commands", "commands_sent", "checks", "verify_commands", "plan")}}
+
+
+def job_out(doc: dict, backup: bool = True) -> dict:
+    """API view of a job. ``backup=False`` leaves out the running-config backups (viewer role)."""
     def conv(v):
         if isinstance(v, ObjectId):
             return str(v)
@@ -426,9 +691,7 @@ def job_out(doc: dict, detail: bool = False) -> dict:
 
     out = conv({k: v for k, v in doc.items() if k != "_id"})
     out["id"] = str(doc["_id"])
-    if not detail:
-        out.pop("plan", None)
-        for s in out["steps"]:
-            for k in ("backup", "output", "commands", "commands_sent", "checks", "verify_commands"):
-                s.pop(k, None)
+    if not backup:
+        for s in out.get("steps", []):
+            s.pop("backup", None)
     return out

@@ -62,8 +62,8 @@ class ConnectParams:
     device_type: str  # Netmiko device_type for SSH, e.g. "cisco_ios"
     host: str | None
     port: int | None
-    username: str
-    password: SecretStr
+    username: str | None  # None: a console of a new device without a login
+    password: SecretStr | None
     secret: SecretStr | None = None
     serial_port: str | None = None
     baud: int = 9600
@@ -98,9 +98,7 @@ class NetmikoConnection:
     def _call(self, fn, *args, **kwargs) -> str:
         try:
             return fn(*args, **kwargs)
-        except (OSError, EOFError) as exc:
-            raise ConnectionLost(type(exc).__name__) from exc
-        except Exception as exc:  # noqa: BLE001 - Netmiko/paramiko raise many types; all mean "session broke"
+        except Exception as exc:  # noqa: BLE001 - OSError, EOFError, Netmiko/paramiko errors: all mean "session broke"
             raise ConnectionLost(type(exc).__name__) from exc
 
     def show(self, command: str) -> str:
@@ -145,7 +143,12 @@ def open_netmiko(params: ConnectParams) -> NetmikoConnection:
     from netmiko.exceptions import NetmikoAuthenticationException, NetmikoTimeoutException
     from paramiko.ssh_exception import BadHostKeyException, SSHException
 
-    common = {"username": params.username, "password": params.password.get_secret_value(),
+    # A console without a login: Netmiko's serial/telnet login only sends these when the device asks for them,
+    # and it answers "no" to IOS's "initial configuration dialog? [yes/no]" by itself (docs/LAB_TESTING.md).
+    if params.method == "ssh" and (not params.username or params.password is None):
+        raise ConnectFailed("auth", "SSH needs a username and password.")
+    password = params.password.get_secret_value() if params.password else ""
+    common = {"username": params.username or "", "password": password,
               "secret": params.secret.get_secret_value() if params.secret else "",
               "session_log": None, "fast_cli": False, "conn_timeout": 15, "auth_timeout": 20, "banner_timeout": 20}
     known_hosts = None

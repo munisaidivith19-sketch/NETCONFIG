@@ -1,0 +1,7 @@
+vlan 99
+ name MGMT
+interface Vlan99
+ description management
+ ip address 10.10.10.2 255.255.255.0
+ no shutdown
+ip default-gateway 10.10.10.1

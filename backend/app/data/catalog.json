@@ -35,7 +35,8 @@
         "ospf",
         "eigrp",
         "bgp",
-        "ssh"
+        "ssh",
+        "default_gateway"
       ],
       "note": "Driver built in Phase 2; stays experimental until the lab checklist passes on IOSv/IOSvL2."
     },

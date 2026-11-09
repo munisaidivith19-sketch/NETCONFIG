@@ -18,7 +18,8 @@ REPLACE_PREFIXES = ("description", "ip address", "switchport access vlan", "swit
                     "switchport trunk native", "switchport trunk allowed", "name", "exec-timeout", "transport input",
                     "router-id", "eigrp router-id", "bgp router-id", "default-router", "network", "dns-server",
                     "lease", "path", "maximum")
-TOP_REPLACE = ("hostname", "ip domain name", "login block-for", "banner motd", "enable secret")
+TOP_REPLACE = ("hostname", "ip domain name", "login block-for", "banner motd", "enable secret",
+               "ip default-gateway")
 SHORT = {"GigabitEthernet": "Gi", "FastEthernet": "Fa", "TenGigabitEthernet": "Te", "TwoGigabitEthernet": "Tw",
          "FortyGigabitEthernet": "Fo", "HundredGigE": "Hu", "Port-channel": "Po", "Vlan": "Vl", "Loopback": "Lo"}
 
@@ -69,8 +70,6 @@ class SimulatedDevice:
         key = next((p for p in TOP_REPLACE if text.startswith(p + " ")), None)
         if key:
             self.top = [t for t in self.top if not t.startswith(key + " ")]
-        if text.startswith("no ip http") and text[3:] in self.top:
-            self.top.remove(text[3:])
         if text not in self.top:
             self.top.append(text)
         return ""
@@ -91,6 +90,11 @@ class SimulatedDevice:
             out += ["!", head, *body]
         out += ["!", "end"]
         return "\n".join(out)
+
+    def addresses(self) -> set[str]:
+        with self.lock:
+            return {addr.split()[0] for body in self._interfaces().values()
+                    if (addr := self._value(body, "ip address"))}
 
     def _interfaces(self) -> dict[str, list[str]]:
         return {h.split(" ", 1)[1]: b for h, b in self.sections.items() if h.startswith("interface ")}
@@ -166,9 +170,7 @@ class SimulatedDevice:
                     counters = "       0       0        1    0    0 never    Idle"
                     rows.append(f"{mm.group(1):<15} 4 {mm.group(2):>12}{counters}")
             return "\n".join(rows)
-        if c in ("show ip ospf neighbor", "show ip eigrp neighbors"):
-            return ""
-        return ""
+        return ""  # e.g. show ip ospf neighbor: a simulated device has no neighbours
 
     def _ospf_brief(self) -> str:
         head = next((h for h in self.sections if h.startswith("router ospf ")), None)
@@ -240,9 +242,15 @@ class SimulatedConnector:
     def open(self, params: ConnectParams, who=None, notes: list[str] | None = None):
         if notes is not None:
             notes.append("SIMULATION: this push went to an in-memory simulated device, not the network.")
-        if params.password.get_secret_value() == "wrong":
+        if params.password is not None and params.password.get_secret_value() == "wrong":
             raise ConnectFailed("auth", "Login failed: check the username and password (not retried).")
+        if params.method == "ssh":
+            # After a console bootstrap the same simulated device answers on its new management address.
+            for dev in self.devices.values():
+                if params.host in dev.addresses():
+                    return SimulatedConnection(dev)
         key = params.host or params.serial_port or "sim"
         if key not in self.devices:
-            self.devices[key] = SimulatedDevice("Switch", params.host)
+            # A console (serial / lab console server) is not an address of the device itself.
+            self.devices[key] = SimulatedDevice("Switch", params.host if params.method == "ssh" else None)
         return SimulatedConnection(self.devices[key])

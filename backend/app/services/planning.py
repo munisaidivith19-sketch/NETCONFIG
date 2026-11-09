@@ -108,7 +108,7 @@ def prepare(db: Database, settings: Settings, plan: ConfigPlan, *, device_id: st
 
     p.commands = mask_lines(commands)
     p.verify_commands = driver.verify_commands(plan)
-    if device and device.get("mgmt_ip"):
+    if device and device.get("mgmt_ip") and via_ssh:
         p.warnings.append(f"Before applying, the device is checked for the interface holding {device['mgmt_ip']}; "
                           "changes that would cut that connection are blocked.")
     return p

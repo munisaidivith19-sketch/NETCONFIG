@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Play, ShieldAlert } from 'lucide-react'
 import { post } from '../lib/api.js'
-import { checkNewSecret, secretsNeeded } from '../lib/jobs.js'
+import { checkNewSecret, needsLogin, secretsNeeded } from '../lib/jobs.js'
 import { Alert, ErrorNote, Field } from './ui.jsx'
 
 const EMPTY = {
@@ -19,14 +19,19 @@ export default function RunForm({ job, onStarted }) {
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
   const need = secretsNeeded(job.plan)
-  const method = job.steps?.[0]?.connection
+  const methods = new Set((job.steps || []).map((s) => s.connection))
+  const loginRequired = needsLogin(job)
+  const many = (job.steps || []).length > 1
 
   const set = (k) => (e) => setV((old) => ({ ...old, [k]: e.target.value }))
 
   function check() {
     const errs = {}
-    if (!v.username.trim()) errs.username = 'Required'
-    if (!v.password) errs.password = 'Required'
+    if (loginRequired || v.username.trim() || v.password) {
+      // A console of a brand-new device has no login, so both may stay empty there.
+      if (!v.username.trim()) errs.username = 'Required'
+      if (!v.password) errs.password = 'Required'
+    }
     if (need.sshUser) {
       const e = checkNewSecret(v.ssh_user_password, v.ssh_user_password2)
       if (e) errs.ssh_user_password = e
@@ -44,7 +49,7 @@ export default function RunForm({ job, onStarted }) {
     const errs = check()
     setErrors(errs)
     if (Object.keys(errs).length) return
-    const body = { username: v.username.trim(), password: v.password }
+    const body = v.username.trim() ? { username: v.username.trim(), password: v.password } : {}
     if (v.enable_secret) body.enable_secret = v.enable_secret
     if (need.sshUser) body.ssh_user_password = v.ssh_user_password
     if (need.enableSecret) body.new_enable_secret = v.new_enable_secret
@@ -77,9 +82,13 @@ export default function RunForm({ job, onStarted }) {
         These are sent to the local backend for this push only, kept in memory while it runs, and wiped when it
         ends. They are not saved in the database, the logs or this browser.
       </Alert>
-      {method === 'telnet_lab' && (
+      {methods.has('telnet_lab') && (
         <Alert tone="warning" title="Insecure lab console.">Telnet sends the password in clear text. Use it only on an emulator or isolated lab.</Alert>
       )}
+      {!loginRequired && (
+        <Alert tone="info">Console connection: leave the login empty if the device has none yet (a new device).</Alert>
+      )}
+      {many && <p className="faint" style={{ margin: 0 }}>The same login is used for every device in this job.</p>}
       <div className="form-grid">
         {input('username', 'Device username', { type: 'text', auto: 'off' })}
         {input('password', 'Device password')}
@@ -99,7 +108,7 @@ export default function RunForm({ job, onStarted }) {
       <ErrorNote error={error} />
       <div className="form-actions">
         <button type="submit" className="btn primary" disabled={busy}>
-          <Play size={18} aria-hidden="true" /> {busy ? 'Starting…' : 'Run the push'}
+          <Play size={18} aria-hidden="true" /> {busy ? 'Starting…' : job.kind === 'bootstrap' ? 'Run the first-time setup' : 'Run the push'}
         </button>
       </div>
     </form>

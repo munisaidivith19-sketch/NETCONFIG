@@ -1,5 +1,5 @@
 import { Plus, Trash2 } from 'lucide-react'
-import { NEW_ROWS, errorAt } from '../lib/plan.js'
+import { NEW_ROWS, errorAt, setPath } from '../lib/plan.js'
 import { Alert, Field } from './ui.jsx'
 
 // Requirements step of the Configure wizard. Sections appear only when the target model supports them
@@ -90,17 +90,9 @@ function Rows({ items, onAdd, onRemove, addLabel, render, max }) {
   )
 }
 
-export default function PlanForm({ form, setForm, caps, errors, production, portHint }) {
+export default function PlanForm({ form, setForm, caps, errors, production, portHint, category }) {
   const has = (c) => caps.has(c)
-  const set = (path, value) =>
-    setForm((f) => {
-      const next = structuredClone(f)
-      const keys = path.split('.')
-      let o = next
-      for (const k of keys.slice(0, -1)) o = o[k]
-      o[keys.at(-1)] = value
-      return next
-    })
+  const set = (path, value) => setForm((f) => setPath(f, path, value))
   const add = (list, row) => setForm((f) => ({ ...f, [list]: [...f[list], row()] }))
   const remove = (list, i) => setForm((f) => ({ ...f, [list]: f[list].filter((_, j) => j !== i) }))
   const e = (path) => errorAt(errors, path)
@@ -260,6 +252,14 @@ export default function PlanForm({ form, setForm, caps, errors, production, port
               </>
             )}
           />
+        </Section>
+      )}
+
+      {category === 'switch' && has('default_gateway') && (
+        <Section id="gateway" title="Management default gateway" hint="Layer 2 switches only: where the switch sends its own management traffic (ip default-gateway). It must be inside a VLAN interface subnet above." error={exact('default_gateway')}>
+          <div className="form-grid">
+            <Input label="Default gateway" value={form.default_gateway} onChange={(v) => set('default_gateway', v)} error={e('default_gateway')} placeholder="10.0.99.1" mono />
+          </div>
         </Section>
       )}
 

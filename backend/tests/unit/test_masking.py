@@ -14,6 +14,22 @@ CASES = [
      "set security ike policy p pre-shared-key ascii-text " + MASK),
     ("crypto isakmp key 0 MyKey address 1.2.3.4", "crypto isakmp key 0 " + MASK + " address 1.2.3.4"),
     ("ENABLE SECRET topsecret", "ENABLE SECRET " + MASK),
+    # Shared keys a running-config backup holds in clear text (Phase 3C security review)
+    ("tacacs-server key Tac4csKey", "tacacs-server key " + MASK),
+    ("radius-server host 10.1.1.1 auth-port 1645 acct-port 1646 key 7 0822455D0A16",
+     "radius-server host 10.1.1.1 auth-port 1645 acct-port 1646 key 7 " + MASK),
+    (" key 0 RadKey123", " key 0 " + MASK),  # inside "radius server X" / "tacacs server X"
+    (" key Plain-Tac-Key", " key " + MASK),
+    ("crypto isakmp key IkePsk address 1.2.3.4", "crypto isakmp key " + MASK + " address 1.2.3.4"),
+    (" ip ospf message-digest-key 1 md5 OspfKey", " ip ospf message-digest-key 1 md5 " + MASK),
+    (" ip ospf message-digest-key 7 md5 7 0822455D0A16", " ip ospf message-digest-key 7 md5 7 " + MASK),
+    (" ip ospf authentication-key 7 0822455D0A16", " ip ospf authentication-key 7 " + MASK),
+    ("ntp authentication-key 1 md5 NtpKey 7", "ntp authentication-key 1 md5 " + MASK + " 7"),
+    ("snmp-server host 10.1.1.5 version 2c TrapComm", "snmp-server host 10.1.1.5 version 2c " + MASK),
+    ("snmp-server host 10.1.1.5 TrapComm", "snmp-server host 10.1.1.5 " + MASK),
+    ("snmp-server user u1 g1 v3 auth sha AuthPass1 priv aes 128 PrivPass1",
+     "snmp-server user u1 g1 v3 auth sha " + MASK + " priv aes 128 " + MASK),
+    (" wpa-psk ascii 0 WifiKey123", " wpa-psk ascii 0 " + MASK),
 ]
 
 
@@ -24,7 +40,8 @@ def test_masks_secret_value_and_keeps_keyword(raw, expected):
 
 def test_keeps_non_secret_lines():
     for line in ["service password-encryption", "no service password-encryption", "hostname core-sw1",
-                 "interface GigabitEthernet1/0/1"]:
+                 "interface GigabitEthernet1/0/1", "crypto key generate rsa modulus 2048",
+                 "tacacs-server directed-request", "ip ospf authentication message-digest"]:
         assert mask_text(line) == line
 
 

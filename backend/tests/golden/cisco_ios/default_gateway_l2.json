@@ -1,0 +1,9 @@
+{
+  "description": "Layer 2 switch management: SVI in the management VLAN and ip default-gateway (no ip routing).",
+  "model_id": "cisco-ws-c2960x-24ts-l",
+  "plan": {
+    "vlans": [{"id": 99, "name": "MGMT"}],
+    "svis": [{"vlan": 99, "ip": "10.10.10.2/24", "description": "management"}],
+    "default_gateway": "10.10.10.1"
+  }
+}

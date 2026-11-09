@@ -6,7 +6,7 @@ from app.drivers.base import ModelInfo
 from app.drivers.cisco_ios import CiscoIos
 from app.models.plan import ConfigPlan
 from app.services.catalog import load_file
-from app.services.connection import ConnectFailed, ConnectParams
+from app.services.connection import ConnectFailed, ConnectionLost, ConnectParams
 from app.services.push import MANUAL, PushEngine, StepInput
 
 from .fake import RSA_KEYS, FakeConnection, FakeConnector
@@ -176,3 +176,88 @@ def test_cancel_before_apply():
     result, states, fake = run(cancelled=cancelled)
     assert result.status == "cancelled" and fake.config_sent() == []
     assert "applying" not in states
+
+
+# ---------------------------------------------------------------- Phase 3B: two-phase apply / commit
+def engine_for(connector, states):
+    return PushEngine(open_connection=lambda p, notes: connector.open(p, notes=notes), on_state=states.append,
+                      sleep=lambda s: None)
+
+
+def step_input(plan=VLAN_PLAN, method="ssh", mgmt_ip="10.0.0.2"):
+    return StepInput(driver=DRIVER, plan=ConfigPlan.model_validate(plan), params=params(method), mgmt_ip=mgmt_ip,
+                     secrets=[PASSWORD])
+
+
+def test_apply_holds_until_commit():
+    from app.services.push import Held
+    fake, states = FakeConnection(), []
+    engine = engine_for(FakeConnector(fake), states)
+    held = engine.apply(step_input())
+    assert isinstance(held, Held) and fake.closed == 0
+    assert ("exec", "configure confirm") not in fake.sent  # not confirmed yet: the revert timer still runs
+    result = engine.commit(held)
+    assert result.status == "success" and fake.sent[-2:] == [("exec", "configure confirm"), ("exec", "write memory")]
+    assert fake.closed == 1 and "configure confirm" in result.output
+
+
+def test_abort_rolls_back_a_held_change():
+    fake, states = FakeConnection(), []
+    engine = engine_for(FakeConnector(fake), states)
+    result = engine.abort(engine.apply(step_input()), "the other side failed")
+    assert result.status == "rolled_back" and result.error["message"] == "the other side failed"
+    assert ("exec", "configure revert now") in fake.sent and ("exec", "configure confirm") not in fake.sent
+    assert fake.closed == 1
+
+
+def test_commit_refused_when_revert_timer_nearly_over(fake_clock):
+    fake, states = FakeConnection(), []
+    engine = engine_for(FakeConnector(fake), states)
+    held = engine.apply(step_input())
+    fake_clock.advance(minutes=9, seconds=45)  # 10-minute timer, less than CONFIRM_MARGIN left
+    result = engine.commit(held)
+    assert result.status == "rolled_back" and "revert timer ran out" in result.error["message"]
+    assert ("exec", "configure confirm") not in fake.sent
+
+
+def test_connection_lost_during_save_is_manual_action():
+    fake = FakeConnection()
+    states = []
+    engine = engine_for(FakeConnector(fake), states)
+    held = engine.apply(step_input())
+
+    def broken(cmd):
+        if cmd == "write memory":
+            raise ConnectionLost("EOFError")
+        return ""
+    fake.exec = broken
+    result = engine.commit(held)
+    assert result.status == "failed" and any(MANUAL in n for n in result.notes)
+
+
+def test_console_server_is_not_a_device_address():
+    """Telnet to a GNS3/CML console server (127.0.0.1:5000): no interface holds that address, and that is fine."""
+    fake, states = FakeConnection(), []
+    result = engine_for(FakeConnector(fake), states).run(step_input(method="telnet_lab", mgmt_ip="127.0.0.1"))
+    assert result.status == "success", result.error
+    assert result.mgmt_interface is None and any("console-server" in n for n in result.notes)
+
+
+def test_lab_telnet_to_a_device_address_stays_protected():
+    """Telnet to an address the device's config does hold, but the interface list was not understood:
+    blocked, not treated as a console server."""
+    fake, states = FakeConnection(responses={"show ip interface brief": "garbled"}), []
+    result = engine_for(FakeConnector(fake), states).run(step_input(method="telnet_lab", mgmt_ip="10.0.0.2"))
+    assert result.status == "blocked" and not fake.config_sent()
+
+
+def test_ssh_still_blocked_when_mgmt_interface_unknown():
+    fake, states = FakeConnection(), []
+    result = engine_for(FakeConnector(fake), states).run(step_input(mgmt_ip="192.0.2.50"))
+    assert result.status == "blocked" and not fake.config_sent()
+
+
+def test_serial_skips_management_check():
+    fake, states = FakeConnection(), []
+    result = engine_for(FakeConnector(fake), states).run(step_input(method="serial", mgmt_ip=None))
+    assert result.status == "success" and ("show", "show ip interface brief") not in fake.sent

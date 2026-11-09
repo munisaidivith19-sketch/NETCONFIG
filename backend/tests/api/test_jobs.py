@@ -231,6 +231,8 @@ def test_viewer_reads_history_but_cannot_act(client_for, runner):
     viewer = client_for("viewer")
     listing = viewer.get("/api/jobs").json()
     assert listing["total"] == 1 and "output" not in listing["items"][0]["steps"][0]
-    assert viewer.get(f"/api/jobs/{job['id']}").status_code == 200
+    detail = viewer.get(f"/api/jobs/{job['id']}")
+    assert detail.status_code == 200 and "backup" not in detail.json()["steps"][0]  # no device configs for viewers
+    assert "backup" in eng.get(f"/api/jobs/{job['id']}").json()["steps"][0]
     assert viewer.post(f"/api/jobs/{job['id']}/run", json=CREDS).status_code == 403
     assert viewer.get("/api/jobs", params={"status": "nonsense"}).status_code == 422

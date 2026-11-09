@@ -11,7 +11,7 @@ from ..security.masking import MASK
 from .base import Check, Kind, ModelInfo, UnsupportedFeature, expand_vlan_list, vlan_list
 
 ALL_CAPABILITIES = {"vlans", "access", "trunk", "svi", "routed_if", "dhcp", "nat", "static", "ospf", "eigrp",
-                    "bgp", "ssh"}
+                    "bgp", "ssh", "default_gateway"}
 
 # Full interface type names. An abbreviation expands only when exactly one name starts with it.
 IF_TYPES = ["GigabitEthernet", "FastEthernet", "TenGigabitEthernet", "TwoGigabitEthernet", "FiveGigabitEthernet",
@@ -115,6 +115,8 @@ class CiscoIos:
             net = ipaddress.IPv4Network(st.prefix)
             line = f"ip route {net.network_address} {_mask(net)} {st.next_hop or st.interface}"
             out.append(f"{line} {st.distance}" if st.distance else line)
+        if plan.default_gateway:
+            out.append(f"ip default-gateway {plan.default_gateway}")
         self._routing(plan, out)
         out += list(plan.custom_commands)
         return out
@@ -252,8 +254,8 @@ class CiscoIos:
     def verify_commands(self, plan: ConfigPlan) -> list[str]:
         f = set(plan.features())
         cmds: list[str] = []
-        if plan.basic or plan.hardening or plan.ssh or plan.statics or "eigrp" in f or plan.dhcp or \
-                any(g.port_security for g in plan.access):
+        if plan.basic or plan.hardening or plan.ssh or plan.statics or plan.default_gateway or "eigrp" in f \
+                or plan.dhcp or any(g.port_security for g in plan.access):
             cmds.append("show running-config")
         if "ssh" in f:
             cmds.append("show ip ssh")
@@ -338,6 +340,9 @@ class CiscoIos:
             net = ipaddress.IPv4Network(st.prefix)
             want = f"ip route {net.network_address} {_mask(net)} {st.next_hop or st.interface}"
             checks.append(Check(f"static route {st.prefix}", any(line.startswith(want) for line in top)))
+        if plan.default_gateway:
+            gw = f"ip default-gateway {plan.default_gateway}"
+            checks.append(Check(f"default gateway {plan.default_gateway}", gw in top))
         if plan.routing:
             checks += self._check_routing(plan, outputs, run)
         return checks

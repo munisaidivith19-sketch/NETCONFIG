@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { checkNewSecret, phaseStates, pollDelay, secretsNeeded } from './jobs.js'
 
-const job = (status, states) => ({ status, steps: [{ timeline: states.map((state) => ({ state })) }] })
+const job = (status, states) => ({ status, steps: [{ status, timeline: states.map((state) => ({ state })) }] })
 
 describe('phaseStates', () => {
   it('marks reached phases done and the current one active', () => {

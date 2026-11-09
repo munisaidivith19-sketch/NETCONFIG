@@ -2,6 +2,7 @@ import { Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout.jsx'
 import { RequireAuth } from './lib/auth.jsx'
 import Account from './pages/Account.jsx'
+import Bootstrap from './pages/Bootstrap.jsx'
 import Catalog from './pages/Catalog.jsx'
 import Configure from './pages/Configure.jsx'
 import Devices from './pages/Devices.jsx'
@@ -11,6 +12,7 @@ import Audit from './pages/admin/Audit.jsx'
 import Users from './pages/admin/Users.jsx'
 import Login from './pages/Login.jsx'
 import Placeholder from './pages/Placeholder.jsx'
+import RouterLink from './pages/RouterLink.jsx'
 
 export default function App() {
   return (
@@ -34,6 +36,8 @@ export default function App() {
             </RequireAuth>
           }
         />
+        <Route path="configure/link" element={<RequireAuth role="engineer"><RouterLink /></RequireAuth>} />
+        <Route path="configure/bootstrap" element={<RequireAuth role="engineer"><Bootstrap /></RequireAuth>} />
         <Route path="history" element={<History />} />
         <Route path="history/:jobId" element={<History />} />
         <Route path="account" element={<Account />} />

@@ -21,6 +21,7 @@ Domain = Annotated[str, StringConstraints(
     max_length=253, pattern=r"^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$")]
 Description = Annotated[str, StringConstraints(max_length=80, pattern=SAFE_TEXT)]
 BannerText = Annotated[str, StringConstraints(min_length=1, max_length=240, pattern=SAFE_BANNER)]
+NoteText = Annotated[str, StringConstraints(max_length=200, pattern=SAFE_BANNER)]  # job notes, reasons, template text
 Name32 = Annotated[str, StringConstraints(min_length=1, max_length=32, pattern=r"^[A-Za-z0-9_-]+$")]
 DeviceUser = Annotated[str, StringConstraints(min_length=1, max_length=32, pattern=r"^[A-Za-z0-9_.-]+$")]
 IfName = Annotated[str, StringConstraints(min_length=2, max_length=48, pattern=r"^[A-Za-z0-9][A-Za-z0-9/.:-]*$")]
@@ -196,6 +197,8 @@ class ConfigPlan(StrictModel):
     dhcp: list[DhcpPool] = Field(default_factory=list, max_length=32)
     nat: Nat | None = None
     statics: list[StaticRoute] = Field(default_factory=list, max_length=64)
+    # Layer 2 switches only: where the switch sends its own management traffic (routers use a static route).
+    default_gateway: IPv4 | None = None
     routing: Routing | None = None
     custom_commands: list[CustomCommand] = Field(default_factory=list, max_length=50)
     save: bool = True
@@ -208,7 +211,7 @@ class ConfigPlan(StrictModel):
             ("vlans", self.vlans), ("access", self.access), ("trunk", self.trunks), ("svi", self.svis),
             ("routed_if", self.interfaces), ("dhcp", self.dhcp), ("nat", self.nat), ("static", self.statics),
             ("ospf", self.routing and self.routing.ospf), ("eigrp", self.routing and self.routing.eigrp),
-            ("bgp", self.routing and self.routing.bgp), ("ssh", self.ssh),
+            ("bgp", self.routing and self.routing.bgp), ("ssh", self.ssh), ("default_gateway", self.default_gateway),
         ]:
             if present:
                 used.append(name)

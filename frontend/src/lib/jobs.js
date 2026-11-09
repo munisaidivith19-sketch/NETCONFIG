@@ -40,13 +40,13 @@ export const PHASES = [
 ]
 
 /**
- * State of every phase from the job's timeline: 'done' | 'active' | 'failed' | 'pending'.
- * The last phase reached is 'failed' when the job ended badly (failed, blocked, rolled back).
+ * State of every phase of one step (one device) from its timeline: 'done' | 'active' | 'failed' | 'pending'.
+ * The last phase reached is 'failed' when the step ended badly (failed, blocked, rolled back).
  */
-export function phaseStates(job) {
-  const step = job?.steps?.[0]
+export function phaseStates(job, index = 0) {
+  const step = job?.steps?.[index]
   const reached = new Set((step?.timeline || []).map((t) => t.state))
-  const status = job?.status
+  const status = step?.status
   const bad = ['failed', 'blocked', 'rolled_back', 'rolling_back'].includes(status)
   const lastReached = [...PHASES].reverse().find(([id]) => reached.has(id))?.[0]
   return PHASES.map(([id, label]) => {
@@ -56,9 +56,34 @@ export function phaseStates(job) {
       else if (bad && id === lastReached) state = 'failed'
       else state = 'done'
     }
-    if (status === 'success' && reached.has(id)) state = 'done'
     return { id, label, state }
   })
+}
+
+export const KIND = {
+  push: 'Single device',
+  multi: 'Several switches',
+  link: 'Router link',
+  bootstrap: 'First-time setup',
+}
+
+/**
+ * Several switches can be stopped while running: switches not started are skipped, and the one in progress
+ * stops too if nothing was sent to it yet (backend: JobRunner.cancel).
+ */
+export function canCancel(job) {
+  return CANCELLABLE.includes(job.status) || (job.kind === 'multi' && isRunning(job.status))
+}
+
+/** SSH needs a device login; a console of a brand-new device usually has none. */
+export function needsLogin(job) {
+  return (job?.steps || []).some((s) => s.connection === 'ssh')
+}
+
+/** "sw1, sw2 +3" for lists and titles. */
+export function deviceNames(job, max = 2) {
+  const names = (job?.steps || []).map((s) => s.device_name)
+  return names.length > max ? `${names.slice(0, max).join(', ')} +${names.length - max}` : names.join(job?.kind === 'link' ? ' ↔ ' : ', ')
 }
 
 /** Which run-time secrets the stored plan needs (the plan itself never holds them). */

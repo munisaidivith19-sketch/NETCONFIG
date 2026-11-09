@@ -29,7 +29,7 @@ function makeJob(status, extra = {}) {
     approval: { required: false, expires_at: null, approved_by: null }, note: '', cancel_reason: null,
     plan: { vlans: [{ id: 10, name: 'Sales' }], ssh: { username: 'netadmin', set_enable_secret: false } },
     steps: [{
-      device_name: 'lab-sw1', connection: 'ssh', commands: ['vlan 10', ' name Sales'], warnings: [],
+      device_name: 'lab-sw1', connection: 'ssh', status, commands: ['vlan 10', ' name Sales'], warnings: [],
       timeline: upTo.map((state) => ({ state, at: '2026-11-08T10:00:00Z' })), output: '', backup: '',
       checks: [], notes: [], error: null,
     }],

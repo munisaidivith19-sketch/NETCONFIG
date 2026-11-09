@@ -15,7 +15,7 @@ import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from pydantic import SecretStr
 
@@ -28,6 +28,7 @@ from .connection import ConnectFailed, Connection, ConnectionLost, ConnectParams
 
 MANUAL = "MANUAL ACTION REQUIRED"
 RSA_PROMPTS = [(r"\[yes/no\]", "yes")]
+CONFIRM_MARGIN = timedelta(seconds=20)  # never confirm a change in its last seconds
 CONNECT_RETRY_SECONDS = 3  # one retry, timeouts only (never after a login failure: AAA lockout)
 
 
@@ -54,6 +55,7 @@ class StepResult:
     error: dict | None = None
     notes: list[str] = field(default_factory=list)
     mgmt_interface: str | None = None
+    login_refused: bool = False  # the device rejected the login (not stored; stops retries on other devices)
 
 
 class Transcript:
@@ -79,7 +81,7 @@ class Transcript:
 
 def find_error(driver: Driver, output: str) -> str | None:
     """First output line that matches an error pattern and is not a known informational line."""
-    info = [re.compile(p) for p in getattr(driver, "info_patterns", lambda: [])()]
+    info = [re.compile(p) for p in driver.info_patterns()]
     errors = [re.compile(p) for p in driver.error_patterns()]
     for line in (output or "").splitlines():
         if any(p.search(line) for p in info):
@@ -101,8 +103,26 @@ def _has_archive(running_config: str) -> bool:
     return False
 
 
+def _mentions(config: str, ip: str) -> bool:
+    """Whether the address appears anywhere in the config as a whole address (not as part of a longer one)."""
+    return re.search(rf"(?<![\d.]){re.escape(ip)}(?![\d.])", config or "") is not None
+
+
 def _has_rsa_keys(output: str) -> bool:
     return bool(re.search(r"Key name:|Key Data:", output or ""))
+
+
+@dataclass
+class Held:
+    """Applied and verified, not yet confirmed: the device's revert timer is still running."""
+
+    conn: Connection
+    step: StepInput
+    res: StepResult
+    log: Transcript
+    deadline: datetime
+    steps: dict
+    confirmed: bool = False  # set by confirm(): the revert timer is cancelled, only the save is left
 
 
 class PushEngine:
@@ -130,18 +150,27 @@ class PushEngine:
         self.on_state(name)
 
     def run(self, step: StepInput) -> StepResult:
+        """One device, start to finish: apply and verify, then confirm and save."""
+        out = self.apply(step)
+        return out if isinstance(out, StepResult) else self.commit(out)
+
+    def apply(self, step: StepInput) -> "StepResult | Held":
+        """Everything up to a verified change. Returns a Held step (still inside the revert timer, not yet
+        confirmed) or a finished StepResult (blocked, failed, rolled back, cancelled)."""
         driver, plan = step.driver, step.plan
         plan_secrets = [plan.ssh.password, plan.ssh.enable_secret] if plan.ssh else []
         log = Transcript([*step.secrets, step.params.password, step.params.secret, *plan_secrets])
         res = StepResult(status="failed")
         conn: Connection | None = None
         applied = False  # True once the first config command may have reached the device
+        held = None
         try:
             self._state("connecting")
             try:
                 conn = self._connect(step.params, res.notes)
             except ConnectFailed as exc:
                 res.error = {"command": None, "message": exc.message}
+                res.login_refused = exc.kind == "auth"
                 return res
             log.add("connected", "")
 
@@ -153,17 +182,24 @@ class PushEngine:
             self._state("checking")
             mgmt_if = None
             via_ssh = step.params.method == "ssh"
-            if step.mgmt_ip and step.params.method != "serial":
+            if step.mgmt_ip and step.params.method in ("ssh", "telnet_lab"):
                 brief = conn.show("show ip interface brief")
                 log.add("show ip interface brief", brief)
                 mgmt_if = driver.management_interface({"show ip interface brief": brief}, step.mgmt_ip)
                 res.mgmt_interface = mgmt_if
-                if mgmt_if is None:
+                # Over a lab console the address may be the console server (GNS3/CML), which no device port holds.
+                # That is accepted only if the address appears nowhere in the device's config; otherwise the
+                # interface list was simply not understood, and the push is blocked as it is over SSH.
+                if mgmt_if is None and (via_ssh or _mentions(running, step.mgmt_ip)):
                     res.status = "blocked"
                     res.error = {"command": None, "message": f"No interface holds the management address "
                                  f"{step.mgmt_ip}, so management protection cannot be checked. Nothing was sent."}
                     return res
-                res.notes.append(f"Management interface: {mgmt_if} ({step.mgmt_ip}).")
+                if mgmt_if is None:
+                    res.notes.append(f"{step.mgmt_ip} is not an address of the device, so this is a console-server "
+                                     "connection; management-interface protection does not apply.")
+                else:
+                    res.notes.append(f"Management interface: {mgmt_if} ({step.mgmt_ip}).")
             commands = driver.generate(plan, "push")
             if plan.ssh:
                 keys = conn.show("show crypto key mypubkey rsa")
@@ -190,9 +226,10 @@ class PushEngine:
                 for line in steps["archive"]:
                     out = conn.config_line(line)
                     log.add(line, out)
-                    if find_error(driver, out):
+                    err = find_error(driver, out)
+                    if err:
                         conn.exit_config()
-                        res.error = {"command": line, "message": find_error(driver, out)}
+                        res.error = {"command": line, "message": err}
                         return res
                 conn.exit_config()
                 res.notes.append("Configuration archive created (needed for the automatic rollback).")
@@ -227,27 +264,8 @@ class PushEngine:
             if failed:
                 res.error = {"command": None, "message": f"Verification failed: {failed[0].name} ({failed[0].detail})"}
                 return self._rollback(conn, step, res, log, deadline)
-
-            out = conn.exec(steps["confirm"][0])
-            log.add(steps["confirm"][0], out)
-            if find_error(driver, out):
-                res.error = {"command": steps["confirm"][0], "message": find_error(driver, out)}
-                res.notes.append("The confirm failed, so the device will restore its old config when the timer ends.")
-                res.status = "rolled_back"
-                return res
-            res.notes.append("Change confirmed; the rollback timer is cancelled.")
-
-            save = driver.save_command()
-            if plan.save and save:
-                self.on_state("saving")
-                out = conn.exec(save)
-                log.add(save, out)
-                if find_error(driver, out):
-                    res.error = {"command": save, "message": find_error(driver, out)}
-                    res.notes.append(f"{MANUAL}: the change is active but was NOT saved to the startup configuration.")
-                    return res
-            res.status = "success"
-            return res
+            held = Held(conn=conn, step=step, res=res, log=log, deadline=deadline, steps=steps)
+            return held
         except Cancelled:
             res.status = "cancelled"
             res.notes.append("Withdrawn before any configuration command was sent.")
@@ -265,9 +283,85 @@ class PushEngine:
                 return self._rollback(conn, step, res, log, None)
             return res
         finally:
-            res.output = log.text()
-            if conn is not None:
-                conn.close()
+            if held is None:
+                res.output = log.text()
+                if conn is not None:
+                    conn.close()
+
+    def commit(self, held: "Held") -> StepResult:
+        """Confirm a verified change (this cancels the revert timer), then save it."""
+        return self.confirm(held) or self.save(held)
+
+    def confirm(self, held: "Held") -> StepResult | None:
+        """Send the confirm. None = confirmed: the session stays open for save(). Otherwise the change was not
+        confirmed (the device reverts by its timer, or was rolled back) and the finished StepResult is returned.
+        A router link confirms both sides before saving either, so one side is never kept alone for long."""
+        conn, step, res, log = held.conn, held.step, held.res, held.log
+        try:
+            if clock.now() >= held.deadline - CONFIRM_MARGIN:
+                res.status = "rolled_back"
+                res.error = {"command": None, "message": "The revert timer ran out before the change could be "
+                             "confirmed; the device restored its previous configuration by itself."}
+                return self._close(held)
+            confirm = held.steps["confirm"][0]
+            out = conn.exec(confirm)
+            log.add(confirm, out)
+            err = find_error(step.driver, out)
+            if err:
+                res.error = {"command": confirm, "message": err}
+                res.notes.append("The confirm failed, so the device will restore its old config when the timer ends.")
+                res.status = "rolled_back"
+                return self._close(held)
+            held.confirmed = True
+            res.notes.append("Change confirmed; the rollback timer is cancelled.")
+            return None
+        except ConnectionLost:
+            res.error = res.error or {"command": None, "message": "The connection was lost before the confirm."}
+            return self._close(held, self._rollback(None, step, res, log, held.deadline))
+        except Exception as exc:  # noqa: BLE001 - never leak a stack trace
+            res.error = {"command": None, "message": f"Internal error ({type(exc).__name__})."}
+            return self._close(held, self._rollback(conn, step, res, log, held.deadline))
+
+    def save(self, held: "Held") -> StepResult:
+        """Save a confirmed change to the startup configuration and close the session."""
+        conn, step, res, log = held.conn, held.step, held.res, held.log
+        try:
+            save = step.driver.save_command()
+            if step.plan.save and save:
+                self.on_state("saving")
+                out = conn.exec(save)
+                log.add(save, out)
+                err = find_error(step.driver, out)
+                if err:
+                    res.error = {"command": save, "message": err}
+                    res.notes.append(f"{MANUAL}: the change is active but was NOT saved to the startup configuration.")
+                    return res
+            res.status = "success"
+            return res
+        except ConnectionLost:
+            res.error = {"command": None, "message": "The connection was lost while saving."}
+            res.notes.append(f"{MANUAL}: the change is active but may NOT be saved; check the device.")
+            return res
+        except Exception as exc:  # noqa: BLE001 - never leak a stack trace
+            res.error = {"command": None, "message": f"Internal error ({type(exc).__name__})."}
+            res.notes.append(f"{MANUAL}: the change is active; check whether it was saved.")
+            return res
+        finally:
+            self._close(held)
+
+    @staticmethod
+    def _close(held: "Held", res: StepResult | None = None) -> StepResult:
+        held.res.output = held.log.text()
+        held.conn.close()
+        return res or held.res
+
+    def abort(self, held: "Held", message: str) -> StepResult:
+        """Roll back a verified but unconfirmed change (used when the other side of a link failed)."""
+        held.res.error = held.res.error or {"command": None, "message": message}
+        try:
+            return self._rollback(held.conn, held.step, held.res, held.log, held.deadline)
+        finally:
+            self._close(held)
 
     def _rollback(self, conn: Connection | None, step: StepInput, res: StepResult, log: Transcript,
                   deadline) -> StepResult:

@@ -311,6 +311,51 @@ rolled back as well (two-sided link consistency).
   checks, notes, masked transcript and backup. History lists jobs and opens the same view; admins approve or
   reject there. Credentials live only in the form's React state, are sent once, then cleared.
 
+### 5.7 Multi-step jobs: several switches, router link, first-time setup (Phase 3B)
+`POST /jobs` (and `POST /jobs/preview`, which returns the same thing without storing it) takes one of four
+shapes; `services/wizards.py` turns each into **ordinary ConfigPlans, one per device**, so every device still
+goes through `planning.prepare()`: the same validation, denylist, management checks and driver. The wizards
+never write device commands themselves.
+
+| Kind | Request | Steps | How it runs |
+|---|---|---|---|
+| `push` | `device_id` + `plan` | 1 | as in 5.3 |
+| `multi` | `device_ids` (2–20 switches) + `plan` | 1 per switch | one after another. By default the next switch is not started after a failure (`stop_on_failure`); skipped steps are `cancelled` with a note. Per-device settings (hostname, SSH user, IP addresses, DHCP, NAT, routes, default gateway, routing) are refused: they would be duplicated on every switch |
+| `link` | `link`: two ends (device, interface, router ID / AS), a /30 or /31, protocol | A and B | see below |
+| `bootstrap` | `device_id` + `bootstrap` (hostname, domain, admin user, management VLAN or port, address, gateway) | 1 | over the serial or lab console only; see below |
+
+- **Storage:** the job keeps the request (plan secrets removed) and every step keeps its own plan,
+  commands and `commands_hash`. `plan_hash` is the hash of the stored request; `/run` rebuilds the request
+  and refuses unless every step's `commands_hash` is unchanged (approval binding, as in 5.6).
+  One production device makes the whole job need approval.
+- **Status:** before running, all steps share the job status. While running, the job shows the active
+  step's status; at the end it is the aggregate of 5.4 (`success` only if every step succeeded; some
+  succeeded and some not → `failed`, with a `summary` such as "1 of 2 devices changed").
+- **Locks:** a job takes the per-device locks of all its devices, in sorted order (no deadlock between
+  two jobs that share devices).
+- **Router link (two-phase):** the engine is split into `apply()` (connect → backup → checks → apply →
+  verify, then *hold* the session while the device's revert timer runs) and `commit()` (`configure confirm`
+  + save). The runner applies and verifies **A**, then **B**, and only then confirms A and B. If B fails, A
+  is rolled back with `abort()`, so the link is never left configured on one side. `commit()` refuses to
+  confirm in the last 20 s of the timer (the device may already be reverting). Before anything is sent the
+  wizard checks both plans: same subnet, different addresses, same OSPF area / EIGRP AS, matching BGP
+  neighbours, different router IDs. Routing neighbours are checked but informational (they may still be
+  coming up). Edge case: if A is confirmed and B's confirm then fails, A keeps the change and gets a
+  "MANUAL ACTION REQUIRED" note (B reverts by its own timer).
+- **First-time setup:** the login may be empty (a new console has none). Netmiko's console login answers
+  "no" to the initial configuration dialog. The plan sets hostname, domain, management SVI (switches) or
+  port (routers), `ip default-gateway` (Layer 2 switch) or a default route (router), the admin user, enable
+  secret, RSA keys, SSH v2, VTY SSH-only and optional hardening, inside the revert timer like any push.
+  After saving, the runner opens an **SSH test login** to the new address with the new admin user (this
+  first SSH contact pins the host key, see 5.6). Only if it works is the device switched to SSH with the
+  new management address (audited as `device.update`, `by: bootstrap`); otherwise it stays on the console
+  and the job says why.
+- **Management protection on consoles:** over a lab console the address Netmiko connects to is the
+  console server (GNS3/CML), not a device interface, so when no interface holds it the step continues with
+  a note instead of being blocked. Over SSH a missing management interface still blocks (5.3).
+- **Templates** (`/api/templates`): a name, description, optional `os_id` and a plan **without secrets**. A
+  template only pre-fills the Configure form; the plan is validated again for the chosen device.
+
 ---
 
 ## 6. API surface
@@ -338,12 +383,13 @@ All routes are under `/api`. JSON only. Auth is the session cookie. State-changi
 | GET/PATCH | `/devices/{id}` | V / E | |
 | DELETE | `/devices/{id}` | A | |
 | POST | `/plans/preview` | E | `{device_id or model_id, plan}` → 200 `{ok, errors, warnings, unsupported, commands(masked), verify_commands, commands_hash, rollback, save_command}`; schema errors (types, characters, sizes) → 422 with `fields` |
-| POST | `/jobs` | E | create (no credentials) → `awaiting_approval` or `ready` |
+| POST | `/jobs/preview` | E | any job kind (5.7) → `{ok, kind, errors, warnings, checks, production, steps[{device_name, role, commands, verify_commands}]}`; nothing stored except the audit entry |
+| POST | `/jobs` | E | create (no credentials) → `awaiting_approval` or `ready`; body: `device_id`+`plan`, `device_ids`+`plan`, `link`, or `device_id`+`bootstrap` |
 | POST | `/jobs/{id}/approve` | A | approver ≠ requester; binds to `plan_hash` |
 | POST | `/jobs/{id}/reject` | A | |
-| POST | `/jobs/{id}/run` | E | device login + plan secrets (new local user password, enable secret) in body → `queued` |
-| POST | `/jobs/{id}/cancel` | E | only before `applying` |
-| GET | `/jobs?status=&device_id=&page=` | V | history |
+| POST | `/jobs/{id}/run` | E | device login (optional for console-only jobs; `logins[]` for per-device logins) + plan secrets (new local user password, enable secret) in body → `queued` |
+| POST | `/jobs/{id}/cancel` | E | only before `applying`; several switches: also while running (stops before the next switch) |
+| GET | `/jobs?status=&kind=&device_id=&page=` | V | history |
 | GET | `/jobs/{id}` | V | progress + masked outputs |
 | GET/POST | `/templates`, PATCH/DELETE `/templates/{id}` | V / E | |
 | GET | `/hostkeys?pending=true` | A | |
