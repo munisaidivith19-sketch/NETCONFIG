@@ -84,6 +84,7 @@ class Driver(Protocol):
     capabilities: set[str]
     model: ModelInfo
 
+    # Config commands. Custom commands must come LAST: planning.custom_audit() relies on it.
     def generate(self, plan: ConfigPlan, kind: Kind) -> list[str]: ...
     def verify_commands(self, plan: ConfigPlan) -> list[str]: ...
     def check(self, plan: ConfigPlan, outputs: dict[str, str]) -> list[Check]: ...
@@ -94,3 +95,14 @@ class Driver(Protocol):
     def management_interface(self, outputs: dict[str, str], mgmt_ip: str) -> str | None: ...
     def session_steps(self, plan: ConfigPlan) -> dict[str, list[str]]: ...
     def normalize_interface(self, name: str) -> str: ...
+
+    # Push engine support. Pure functions too: the engine runs the show commands and passes their outputs in,
+    # so services/push.py never contains a vendor's command or output format.
+    def backup_command(self) -> str: ...  # the whole running configuration
+    def config_dump_commands(self) -> set[str]: ...  # whole-config outputs: never copied into a transcript
+    def management_commands(self) -> list[str]: ...  # outputs that management_interface() reads
+    def precheck_commands(self, plan: ConfigPlan) -> list[str]: ...  # read before applying, for adapt_commands()
+    def adapt_commands(self, plan: ConfigPlan, commands: list[str],
+                       outputs: dict[str, str]) -> tuple[list[str], list[str]]: ...  # (commands, notes)
+    def prompts(self, command: str) -> list[tuple[str, str]] | None: ...  # (prompt regex, answer) it asks
+    def rollback_setup(self, running_config: str) -> list[str]: ...  # config needed before the rollback works

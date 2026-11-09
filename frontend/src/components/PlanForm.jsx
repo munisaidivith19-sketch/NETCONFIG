@@ -1,56 +1,9 @@
 import { Plus, Trash2 } from 'lucide-react'
 import { NEW_ROWS, errorAt, setPath } from '../lib/plan.js'
-import { Alert, Field } from './ui.jsx'
+import { Alert, Checkbox as Check, Field, SelectInput as Select, TextInput as Input } from './ui.jsx'
 
 // Requirements step of the Configure wizard. Sections appear only when the target model supports them
 // (capabilities from the backend). Errors come from the backend, keyed by plan path.
-
-function Input({ label, value, onChange, error, hint, placeholder, type = 'text', mono = false, inputMode, maxLength }) {
-  return (
-    <Field label={label} hint={hint} error={error}>
-      {(props) => (
-        <input
-          {...props}
-          className="input"
-          style={mono ? { fontFamily: 'var(--font-mono)' } : undefined}
-          type={type}
-          value={value}
-          placeholder={placeholder}
-          inputMode={inputMode}
-          maxLength={maxLength}
-          autoComplete="off"
-          spellCheck={false}
-          onChange={(e) => onChange(e.target.value)}
-        />
-      )}
-    </Field>
-  )
-}
-
-function Check({ label, checked, onChange, disabled }) {
-  return (
-    <label className="checkbox">
-      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
-      <span>{label}</span>
-    </label>
-  )
-}
-
-function Select({ label, value, onChange, options, error }) {
-  return (
-    <Field label={label} error={error}>
-      {(props) => (
-        <select {...props} className="select" value={value} onChange={(e) => onChange(e.target.value)}>
-          {options.map(([v, l]) => (
-            <option key={v} value={v}>
-              {l}
-            </option>
-          ))}
-        </select>
-      )}
-    </Field>
-  )
-}
 
 function Section({ id, title, hint, on, onToggle, error, children }) {
   return (

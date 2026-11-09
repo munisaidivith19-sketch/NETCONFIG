@@ -56,7 +56,8 @@ function Outcome({ job, step }) {
   )
 }
 
-function Checks({ checks }) {
+/** Verification or link checks: {name, ok, detail, required}. */
+export function Checks({ checks }) {
   if (!checks?.length) return null
   return (
     <div className="table-wrap">

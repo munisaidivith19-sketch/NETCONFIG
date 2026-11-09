@@ -47,6 +47,12 @@ require_engineer = require_role("engineer")
 require_admin = require_role("admin")
 
 
+def require_owner_or_admin(owner: dict, user: SessionUser, message: str) -> None:
+    """Record-level rule on top of the route role: only the record's owner ({"id": ...}) or an admin."""
+    if owner["id"] != user.user_id and user.role != "admin":
+        raise ApiError(403, message)
+
+
 def _roles_in(dependant) -> list[str]:
     found = []
     call = getattr(dependant, "call", None)

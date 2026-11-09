@@ -78,6 +78,55 @@ export function Field({ label, hint, error, children, id: givenId }) {
 
 const ALERT_ICONS = { info: Info, warning: AlertTriangle, danger: OctagonAlert, success: CheckCircle2 }
 
+/** Text input with label, hint and error (the backend's field path decides which error shows). */
+export function TextInput({ label, value, onChange, error, hint, placeholder, type = 'text', mono = false, inputMode, maxLength }) {
+  return (
+    <Field label={label} hint={hint} error={error}>
+      {(props) => (
+        <input
+          {...props}
+          className="input"
+          style={mono ? { fontFamily: 'var(--font-mono)' } : undefined}
+          type={type}
+          value={value}
+          placeholder={placeholder}
+          inputMode={inputMode}
+          maxLength={maxLength}
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )}
+    </Field>
+  )
+}
+
+/** Select with label, hint and error; options are [value, text] pairs. */
+export function SelectInput({ label, value, onChange, options, error, hint }) {
+  return (
+    <Field label={label} hint={hint} error={error}>
+      {(props) => (
+        <select {...props} className="select" value={value} onChange={(e) => onChange(e.target.value)}>
+          {options.map(([v, text]) => (
+            <option key={v} value={v}>
+              {text}
+            </option>
+          ))}
+        </select>
+      )}
+    </Field>
+  )
+}
+
+export function Checkbox({ label, checked, onChange, disabled }) {
+  return (
+    <label className="checkbox">
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+      <span>{label}</span>
+    </label>
+  )
+}
+
 export function Alert({ tone = 'info', title, children }) {
   const Icon = ALERT_ICONS[tone] || Info
   return (

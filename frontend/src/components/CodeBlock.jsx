@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { Copy } from 'lucide-react'
 
 /** Numbered, copyable block of commands or device output (already masked by the backend). */
-export default function CodeBlock({ lines, label, empty = 'Nothing here.' }) {
+function CodeBlock({ lines, label, empty = 'Nothing here.' }) {
   const [copied, setCopied] = useState(false)
   async function copy() {
     try {
@@ -35,3 +35,6 @@ export default function CodeBlock({ lines, label, empty = 'Nothing here.' }) {
     </div>
   )
 }
+
+// Memoised: a job page re-renders on every poll, and a transcript can have hundreds of lines.
+export default memo(CodeBlock)

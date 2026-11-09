@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Cable, Eye } from 'lucide-react'
-import { ConfigureTabs, CreateJob, FinishedJob, JobPreview, SelectInput, TextInput, useJobWizard } from '../components/Wizard.jsx'
-import { Alert, Empty, ErrorNote, PageHeader, Panel, SkeletonRows } from '../components/ui.jsx'
+import { ConfigureTabs, CreateJob, FinishedJob, JobPreview, useJobWizard } from '../components/Wizard.jsx'
+import { Alert, Empty, ErrorNote, PageHeader, Panel, SelectInput, SkeletonRows, TextInput } from '../components/ui.jsx'
 import { setPath } from '../lib/plan.js'
 import { emptyLink, linkAddresses, linkBody } from '../lib/wizards.js'
 
@@ -19,13 +19,13 @@ function Side({ side, label, form, set, routers, other, errors }) {
       <legend><strong>{label}</strong></legend>
       <SelectInput label="Device" value={end.device_id} onChange={(v) => set(`${side}.device_id`, v)} options={options} error={e('device_id')} />
       <div className="form-grid">
-        <TextInput label="Interface" value={end.interface} onChange={(v) => set(`${side}.interface`, v)} error={e('interface')} mono
+        <TextInput maxLength={80} label="Interface" value={end.interface} onChange={(v) => set(`${side}.interface`, v)} error={e('interface')} mono
           placeholder="GigabitEthernet0/1" hint={device?.production ? 'Production device: needs approval.' : 'Short names such as Gi0/1 work too.'} />
         {form.protocol !== 'none' && (
-          <TextInput label="Router ID" value={end.router_id} onChange={(v) => set(`${side}.router_id`, v)} error={e('router_id')} mono placeholder={side === 'a' ? '1.1.1.1' : '2.2.2.2'} />
+          <TextInput maxLength={80} label="Router ID" value={end.router_id} onChange={(v) => set(`${side}.router_id`, v)} error={e('router_id')} mono placeholder={side === 'a' ? '1.1.1.1' : '2.2.2.2'} />
         )}
         {form.protocol === 'bgp' && (
-          <TextInput label="Local AS" value={end.asn} onChange={(v) => set(`${side}.asn`, v)} error={e('asn')} inputMode="numeric" placeholder={side === 'a' ? '65001' : '65002'} />
+          <TextInput maxLength={80} label="Local AS" value={end.asn} onChange={(v) => set(`${side}.asn`, v)} error={e('asn')} inputMode="numeric" placeholder={side === 'a' ? '65001' : '65002'} />
         )}
       </div>
     </fieldset>
@@ -65,20 +65,20 @@ export default function RouterLink() {
               {routers.length >= 2 && (
                 <div className="stack">
                   <div className="form-grid">
-                    <TextInput label="Link subnet" value={form.subnet} onChange={(v) => set('subnet', v)} error={errors['link.subnet']} mono placeholder="10.255.0.0/30"
+                    <TextInput maxLength={80} label="Link subnet" value={form.subnet} onChange={(v) => set('subnet', v)} error={errors['link.subnet']} mono placeholder="10.255.0.0/30"
                       hint={addresses ? `A gets ${addresses[0]}, B gets ${addresses[1]}` : 'A /30 or /31 network'} />
                     <SelectInput label="Routing protocol" value={form.protocol} onChange={(v) => set('protocol', v)} options={PROTOCOLS} error={errors['link.protocol']} />
                     {form.protocol === 'ospf' && (
                       <>
-                        <TextInput label="OSPF process ID" value={form.ospf_process_id} onChange={(v) => set('ospf_process_id', v)} error={errors['link.ospf_process_id']} inputMode="numeric" />
-                        <TextInput label="OSPF area" value={form.ospf_area} onChange={(v) => set('ospf_area', v)} error={errors['link.ospf_area']} inputMode="numeric" hint="The same on both sides" />
+                        <TextInput maxLength={80} label="OSPF process ID" value={form.ospf_process_id} onChange={(v) => set('ospf_process_id', v)} error={errors['link.ospf_process_id']} inputMode="numeric" />
+                        <TextInput maxLength={80} label="OSPF area" value={form.ospf_area} onChange={(v) => set('ospf_area', v)} error={errors['link.ospf_area']} inputMode="numeric" hint="The same on both sides" />
                       </>
                     )}
                     {form.protocol === 'eigrp' && (
-                      <TextInput label="EIGRP AS" value={form.eigrp_asn} onChange={(v) => set('eigrp_asn', v)} error={errors['link.eigrp_asn']} inputMode="numeric" hint="The same on both sides" />
+                      <TextInput maxLength={80} label="EIGRP AS" value={form.eigrp_asn} onChange={(v) => set('eigrp_asn', v)} error={errors['link.eigrp_asn']} inputMode="numeric" hint="The same on both sides" />
                     )}
-                    <TextInput label="Description (optional)" value={form.description} onChange={(v) => set('description', v)} error={errors['link.description']} hint='Default: "link to <other router>"' />
-                    <TextInput label="Rollback timer (minutes)" value={form.revert_minutes} onChange={(v) => set('revert_minutes', v)} error={errors['link.revert_minutes']} inputMode="numeric" hint="5–120; both sides share this window" />
+                    <TextInput maxLength={80} label="Description (optional)" value={form.description} onChange={(v) => set('description', v)} error={errors['link.description']} hint='Default: "link to <other router>"' />
+                    <TextInput maxLength={80} label="Rollback timer (minutes)" value={form.revert_minutes} onChange={(v) => set('revert_minutes', v)} error={errors['link.revert_minutes']} inputMode="numeric" hint="5–120; both sides share this window" />
                   </div>
                   <div className="grid two">
                     <Side side="a" label="Side A" form={form} set={set} routers={routers} other={form.b.device_id} errors={errors} />

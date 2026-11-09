@@ -23,7 +23,8 @@ def _out(doc: dict) -> dict:
 def list_keys(_: SessionUser = Depends(require_admin), db: Database = Depends(get_db),
               pending: bool = Query(False)) -> list[dict]:
     query = {"pending": {"$ne": None}} if pending else {}
-    return [_out(d) for d in db.host_keys.find(query, sort=[("host", 1), ("port", 1)]).limit(500)]
+    return [_out(d) for d in db.host_keys.find(query, {"key_b64": 0, "pending.key_b64": 0},
+                                               sort=[("host", 1), ("port", 1)]).limit(500)]
 
 
 @router.post("/{key_id}/accept")

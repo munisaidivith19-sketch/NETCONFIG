@@ -7,8 +7,9 @@ connecting → backing_up → checking → applying → verifying → (confirm) 
                                                                                     └► failed (MANUAL ACTION)
 
 Nothing in a StepResult contains a secret: every text is masked and scrubbed of the known secret values.
-The config is applied inside Cisco's "configure terminal revert timer N", so if this app crashes or the
-link drops, the device restores its previous configuration by itself.
+The config is applied inside the device's own rollback window (Cisco: "configure terminal revert timer N"),
+so if this app crashes or the link drops, the device restores its previous configuration by itself.
+Every vendor command and output format comes from the Driver; this module has none of its own.
 """
 
 import re
@@ -16,6 +17,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from functools import lru_cache
 
 from pydantic import SecretStr
 
@@ -27,7 +29,6 @@ from . import safety
 from .connection import ConnectFailed, Connection, ConnectionLost, ConnectParams
 
 MANUAL = "MANUAL ACTION REQUIRED"
-RSA_PROMPTS = [(r"\[yes/no\]", "yes")]
 CONFIRM_MARGIN = timedelta(seconds=20)  # never confirm a change in its last seconds
 CONNECT_RETRY_SECONDS = 3  # one retry, timeouts only (never after a login failure: AAA lockout)
 
@@ -79,10 +80,15 @@ class Transcript:
         return "\n".join(self.lines)
 
 
+@lru_cache(maxsize=32)
+def _compiled(patterns: tuple[str, ...]) -> tuple[re.Pattern, ...]:
+    return tuple(re.compile(p) for p in patterns)
+
+
 def find_error(driver: Driver, output: str) -> str | None:
     """First output line that matches an error pattern and is not a known informational line."""
-    info = [re.compile(p) for p in driver.info_patterns()]
-    errors = [re.compile(p) for p in driver.error_patterns()]
+    info = _compiled(tuple(driver.info_patterns()))
+    errors = _compiled(tuple(driver.error_patterns()))
     for line in (output or "").splitlines():
         if any(p.search(line) for p in info):
             continue
@@ -91,27 +97,20 @@ def find_error(driver: Driver, output: str) -> str | None:
     return None
 
 
-def _has_archive(running_config: str) -> bool:
-    in_archive = False
-    for line in running_config.splitlines():
-        if line.startswith("archive"):
-            in_archive = True
-        elif in_archive and line.startswith(" path "):
-            return True
-        elif line and not line.startswith(" "):
-            in_archive = False
-    return False
+def _show_all(conn: Connection, log: Transcript, driver: Driver, commands: list[str]) -> dict[str, str]:
+    """Run show commands and log them. A whole config never goes into the transcript: viewers can read it but
+    not the backup (job_out); the checks report what was found in it."""
+    dumps = driver.config_dump_commands()
+    outputs = {}
+    for cmd in commands:
+        outputs[cmd] = conn.show(cmd)
+        log.add(cmd, f"({len(outputs[cmd].splitlines())} lines read)" if cmd in dumps else outputs[cmd])
+    return outputs
 
 
 def _mentions(config: str, ip: str) -> bool:
     """Whether the address appears anywhere in the config as a whole address (not as part of a longer one)."""
     return re.search(rf"(?<![\d.]){re.escape(ip)}(?![\d.])", config or "") is not None
-
-
-def _ssh_enabled(output: str) -> bool:
-    """Whether SSH already runs, i.e. a usable RSA key pair exists. Counting key names in "show crypto key
-    mypubkey rsa" is wrong: IOS-XE's TP-self-signed key (HTTP server) is listed there but never enables SSH."""
-    return bool(re.search(r"SSH Enabled", output or ""))
 
 
 @dataclass
@@ -177,17 +176,17 @@ class PushEngine:
             log.add("connected", "")
 
             self._state("backing_up")
-            running = conn.show("show running-config")
-            log.add("show running-config", f"({len(running.splitlines())} lines saved as backup)")
+            backup_cmd = driver.backup_command()
+            running = conn.show(backup_cmd)
+            log.add(backup_cmd, f"({len(running.splitlines())} lines saved as backup)")
             res.backup = log.scrub(running)
 
             self._state("checking")
             mgmt_if = None
             via_ssh = step.params.method == "ssh"
             if step.mgmt_ip and step.params.method in ("ssh", "telnet_lab"):
-                brief = conn.show("show ip interface brief")
-                log.add("show ip interface brief", brief)
-                mgmt_if = driver.management_interface({"show ip interface brief": brief}, step.mgmt_ip)
+                mgmt_if = driver.management_interface(_show_all(conn, log, driver, driver.management_commands()),
+                                                      step.mgmt_ip)
                 res.mgmt_interface = mgmt_if
                 # Over a lab console the address may be the console server (GNS3/CML), which no device port holds.
                 # That is accepted only if the address appears nowhere in the device's config; otherwise the
@@ -202,13 +201,9 @@ class PushEngine:
                                      "connection; management-interface protection does not apply.")
                 else:
                     res.notes.append(f"Management interface: {mgmt_if} ({step.mgmt_ip}).")
-            commands = driver.generate(plan, "push")
-            if plan.ssh:
-                ssh_state = conn.show("show ip ssh")
-                log.add("show ip ssh", ssh_state)
-                if _ssh_enabled(ssh_state) and not plan.ssh.regenerate_keys:
-                    commands = [c for c in commands if not c.startswith("crypto key generate rsa")]
-                    res.notes.append("SSH already has RSA keys; they are kept (plan did not ask to replace them).")
+            commands, notes = driver.adapt_commands(plan, driver.generate(plan, "push"),
+                                                    _show_all(conn, log, driver, driver.precheck_commands(plan)))
+            res.notes += notes
             res.commands = [log.scrub(c) for c in commands]
             violations = safety.check_denylist(commands) + safety.check_management(
                 commands, mgmt_interface=mgmt_if, mgmt_ip=step.mgmt_ip, via_ssh=via_ssh,
@@ -221,11 +216,14 @@ class PushEngine:
                 return res
 
             strategy = driver.rollback_strategy()
+            if strategy != "revert_timer":
+                raise NotImplementedError(f"rollback strategy {strategy}")  # Phase 4 drivers
             steps = driver.session_steps(plan)
-            if strategy == "revert_timer" and not _has_archive(running):
-                # Prerequisite for the timed rollback (docs/drivers/cisco_ios.md section 1).
-                conn.enter_config("configure terminal")
-                for line in steps["archive"]:
+            setup = driver.rollback_setup(running)
+            if setup:
+                # Prerequisite for the device's own rollback (Cisco: a configuration archive), in its own session.
+                conn.enter_config(steps["configure"][0])
+                for line in setup:
                     out = conn.config_line(line)
                     log.add(line, out)
                     err = find_error(driver, out)
@@ -234,9 +232,7 @@ class PushEngine:
                         res.error = {"command": line, "message": err}
                         return res
                 conn.exit_config()
-                res.notes.append("Configuration archive created (needed for the automatic rollback).")
-            elif strategy != "revert_timer":
-                raise NotImplementedError(f"rollback strategy {strategy}")  # Phase 4 drivers
+                res.notes.append(f"Configured '{setup[0].strip()}' (needed for the automatic rollback).")
 
             self._state("applying")  # last point where a cancel is honoured
             applied = True
@@ -246,7 +242,7 @@ class PushEngine:
             res.notes.append(f"Automatic rollback armed: the device restores its old config at "
                              f"{deadline:%H:%M:%S} UTC unless the change is confirmed.")
             for cmd in commands:
-                out = conn.config_line(cmd, RSA_PROMPTS if cmd.startswith("crypto key generate rsa") else None)
+                out = conn.config_line(cmd, driver.prompts(cmd))
                 log.add(cmd, out)
                 err = find_error(driver, out)
                 if err:
@@ -256,13 +252,7 @@ class PushEngine:
             conn.exit_config()
 
             self.on_state("verifying")
-            outputs = {}
-            for cmd in driver.verify_commands(plan):
-                outputs[cmd] = conn.show(cmd)
-                # A whole config never goes into the transcript: viewers can read it, and they may not see
-                # the backup either (job_out). The checks below report what was found in it.
-                log.add(cmd, f"({len(outputs[cmd].splitlines())} lines read for verification)"
-                        if cmd.startswith("show running-config") else outputs[cmd])
+            outputs = _show_all(conn, log, driver, driver.verify_commands(plan))
             checks = driver.check(plan, outputs)
             res.checks = [_check_out(c, log) for c in checks]
             failed = [c for c in checks if c.required and not c.ok]

@@ -185,7 +185,7 @@ def test_running_config_never_in_transcript():
     result, _, _ = run(plan, fake)
     assert result.status == "success", result.error
     assert "Rack-7-SECRET-ROOM" not in result.output
-    assert "lines read for verification" in result.output and "lines saved as backup" in result.output
+    assert "lines read)" in result.output and "lines saved as backup" in result.output
 
 
 def test_cancel_before_apply():

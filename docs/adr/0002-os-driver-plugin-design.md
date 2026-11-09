@@ -15,6 +15,9 @@ PoE, Layer 2 or Layer 3.
 - **Models are catalog data** that point to an `os_id`, with port naming patterns and capability overrides.
 - **One driver per OS family** implements the `Driver` protocol (`CLAUDE.md` section 7): `generate`,
   `verify_commands`, `check`, `error_patterns`, `save_command`, `rollback_strategy`, `management_interface`.
+  Phase 3C added the push-engine hooks (`backup_command`, `config_dump_commands`, `management_commands`,
+  `precheck_commands` + `adapt_commands`, `prompts`, `rollback_setup`, `session_steps`), so
+  `services/push.py` contains no vendor command or output format: a new driver plugs into the same engine.
 - Drivers are **pure functions** with no device or database access, so they are tested with golden files
   (`tests/golden/<os_id>/<case>.txt`).
 - A `registry` maps `os_id → driver`. Experimental drivers load only when `ENABLE_EXPERIMENTAL_DRIVERS=true`.

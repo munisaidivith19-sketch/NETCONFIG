@@ -10,7 +10,7 @@ from .. import clock
 from ..errors import ApiError
 from ..models.common import oid
 from ..models.template import TemplateCreate, TemplateUpdate
-from ..security.rbac import require_engineer, require_viewer
+from ..security.rbac import require_engineer, require_owner_or_admin, require_viewer
 from ..security.sessions import SessionUser
 from ..services import audit
 from .deps import get_db, rid
@@ -30,8 +30,7 @@ def _editable(db: Database, template_id: str, user: SessionUser) -> dict:
     doc = db.templates.find_one({"_id": oid(template_id)})
     if not doc:
         raise ApiError(404, "Template not found.")
-    if doc["created_by"]["id"] != user.user_id and user.role != "admin":
-        raise ApiError(403, "Only the author or an admin can change this template.")
+    require_owner_or_admin(doc["created_by"], user, "Only the author or an admin can change this template.")
     return doc
 
 

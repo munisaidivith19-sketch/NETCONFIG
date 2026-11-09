@@ -38,6 +38,7 @@ INFO_PATTERNS = [r"% Access VLAN does not exist\. Creating vlan", r"^%(LINK|LINE
 
 NAT_ACL = "NCS_NAT_INSIDE"
 ARCHIVE_DIR = "ncs-archive"
+RSA_GENERATE = "crypto key generate rsa"
 
 
 def _mask(net: ipaddress.IPv4Network) -> str:
@@ -157,8 +158,8 @@ class CiscoIos:
         out.append(f"username {s.username} privilege 15 secret {secret(s.password, 'ssh.password')}")
         if s.set_enable_secret:
             out.append(f"enable secret {secret(s.enable_secret, 'ssh.enable_secret')}")
-        # The push engine checks "show ip ssh" first and only sends this line when SSH is not enabled yet
-        # (no usable key) or regenerate_keys is set (it then answers the replace prompt) – see push.py.
+        # adapt_commands() drops this line at push time when SSH is already enabled (a usable key exists) and
+        # regenerate_keys is not set; prompts() answers the replace prompt.
         out.append(f"crypto key generate rsa modulus {s.rsa_modulus}")
         out.append("ip ssh version 2")
         ranges = ["0 4"] + (["5 15"] if int(self.flags.get("vty_lines", 5)) >= 16 else [])
@@ -483,9 +484,8 @@ class CiscoIos:
 
     def session_steps(self, plan: ConfigPlan) -> dict[str, list[str]]:
         """Commands around the change window (docs/drivers/cisco_ios.md section 1)."""
-        fs = self.flags.get("archive_fs", "flash:")
         return {
-            "archive": ["archive", f" path {fs}{ARCHIVE_DIR}", " maximum 5"],
+            "configure": ["configure terminal"],  # a plain session, for rollback_setup()
             "begin": [f"configure terminal revert timer {plan.revert_minutes}"],
             "confirm": ["configure confirm"],
             "revert": ["configure revert now"],
@@ -494,6 +494,40 @@ class CiscoIos:
     def management_interface(self, outputs: dict[str, str], mgmt_ip: str) -> str | None:
         rows = parse_ip_interface_brief(outputs.get("show ip interface brief", ""), self.normalize_interface)
         return next((name for name, row in rows.items() if row["ip"] == mgmt_ip), None)
+
+    def backup_command(self) -> str:
+        return "show running-config"
+
+    def config_dump_commands(self) -> set[str]:
+        return {"show running-config"}
+
+    def management_commands(self) -> list[str]:
+        return ["show ip interface brief"]
+
+    def precheck_commands(self, plan: ConfigPlan) -> list[str]:
+        return ["show ip ssh"] if plan.ssh else []
+
+    def adapt_commands(self, plan: ConfigPlan, commands: list[str],
+                       outputs: dict[str, str]) -> tuple[list[str], list[str]]:
+        """Keep existing SSH keys unless the plan asks to replace them. "SSH Enabled" means a usable key pair
+        exists; key names in "show crypto key mypubkey rsa" do not (IOS-XE's TP-self-signed key never enables
+        SSH)."""
+        if not plan.ssh or plan.ssh.regenerate_keys or "SSH Enabled" not in outputs.get("show ip ssh", ""):
+            return commands, []
+        return ([c for c in commands if not c.startswith(RSA_GENERATE)],
+                ["SSH already has RSA keys; they are kept (plan did not ask to replace them)."])
+
+    def prompts(self, command: str) -> list[tuple[str, str]] | None:
+        # Only sent when replacing keys (adapt_commands): "Do you really want to replace them? [yes/no]:"
+        return [(r"\[yes/no\]", "yes")] if command.startswith(RSA_GENERATE) else None
+
+    def rollback_setup(self, running_config: str) -> list[str]:
+        """The revert timer needs a configuration archive (section 1); add one only if there is none."""
+        sections = parse_running_config(running_config)["sections"]
+        if any(head == "archive" and any(line.startswith("path ") for line in body.splitlines())
+               for head, body in sections):
+            return []
+        return ["archive", f" path {self.flags.get('archive_fs', 'flash:')}{ARCHIVE_DIR}", " maximum 5"]
 
 
 # ----------------------------------------------------------------- parsers

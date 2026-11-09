@@ -6,7 +6,7 @@ import JobView from '../components/JobView.jsx'
 import PlanForm from '../components/PlanForm.jsx'
 import TemplateBar from '../components/TemplateBar.jsx'
 import { ConfigureTabs, CreateJob, FinishedJob, JobPreview } from '../components/Wizard.jsx'
-import { Alert, Badge, Empty, ErrorNote, PageHeader, Panel, SkeletonRows } from '../components/ui.jsx'
+import { Alert, Badge, Checkbox, Empty, ErrorNote, PageHeader, Panel, SkeletonRows } from '../components/ui.jsx'
 import { get, post } from '../lib/api.js'
 import { useJob } from '../lib/useJob.js'
 import { SUPPORT, categoryIcon, categoryLabel } from '../lib/labels.js'
@@ -237,10 +237,8 @@ function CreateChange({ target, plan, onCreated }) {
   return (
     <CreateJob body={body} production={target.production} onCreated={onCreated}>
       {multi && (
-        <label className="checkbox">
-          <input type="checkbox" checked={stopOnFailure} onChange={(e) => setStopOnFailure(e.target.checked)} />
-          <span>Stop at the first switch that fails (recommended: a bad plan does not reach every switch)</span>
-        </label>
+        <Checkbox label="Stop at the first switch that fails (recommended: a bad plan does not reach every switch)"
+          checked={stopOnFailure} onChange={setStopOnFailure} />
       )}
     </CreateJob>
   )

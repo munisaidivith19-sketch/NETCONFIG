@@ -5,8 +5,8 @@ import { get, post } from '../lib/api.js'
 import { NOTE_HINT, NOTE_PATTERN } from '../lib/jobs.js'
 import { useJob } from '../lib/useJob.js'
 import CodeBlock from './CodeBlock.jsx'
-import JobView from './JobView.jsx'
-import { Alert, Badge, Empty, ErrorNote, Field, Panel } from './ui.jsx'
+import JobView, { Checks } from './JobView.jsx'
+import { Alert, Empty, ErrorNote, Field, Panel } from './ui.jsx'
 
 // Building blocks shared by the Configure pages that create multi-step jobs (several switches, router link,
 // first-time setup). They all call POST /jobs/preview, then POST /jobs; the backend builds and checks the
@@ -54,14 +54,7 @@ export function JobPreview({ preview }) {
       <ErrorList errors={preview.errors} />
       {checks.length > 0 && (
         <Panel title="Both sides match" subtitle="Read back from the two generated plans.">
-          <ul className="progress-list">
-            {checks.map((c) => (
-              <li key={c.name} className={c.ok ? 'done' : 'failed'}>
-                <Badge tone={c.ok ? 'success' : 'danger'}>{c.ok ? 'pass' : 'fail'}</Badge>
-                <span>{c.name}{c.detail ? <span className="faint"> · {c.detail}</span> : null}</span>
-              </li>
-            ))}
-          </ul>
+          <Checks checks={checks} />
         </Panel>
       )}
       {preview.ok && (
@@ -184,30 +177,5 @@ export function CreateJob({ body, production, onCreated, what = 'this change', c
         </div>
       </div>
     </Panel>
-  )
-}
-
-/** Shared input with a label, hint and error (the backend's field path decides which error shows). */
-export function TextInput({ label, value, onChange, error, hint, placeholder, mono, inputMode, maxLength = 80 }) {
-  return (
-    <Field label={label} hint={hint} error={error}>
-      {(props) => (
-        <input {...props} className="input" value={value} placeholder={placeholder} inputMode={inputMode} maxLength={maxLength}
-          style={mono ? { fontFamily: 'var(--font-mono)' } : undefined} autoComplete="off" spellCheck={false}
-          onChange={(e) => onChange(e.target.value)} />
-      )}
-    </Field>
-  )
-}
-
-export function SelectInput({ label, value, onChange, options, error, hint }) {
-  return (
-    <Field label={label} hint={hint} error={error}>
-      {(props) => (
-        <select {...props} className="select" value={value} onChange={(e) => onChange(e.target.value)}>
-          {options.map(([v, text]) => <option key={v} value={v}>{text}</option>)}
-        </select>
-      )}
-    </Field>
   )
 }

@@ -132,7 +132,9 @@ def test_portfast_edge_and_vty_flags():
 def test_session_steps_use_archive_fs_flag():
     driver = CiscoIos(ModelInfo.from_doc(MODELS["cisco-iosv"]))
     steps = driver.session_steps(ConfigPlan.model_validate({"revert_minutes": 7}))
-    assert steps["archive"] == ["archive", " path flash0:ncs-archive", " maximum 5"]
+    assert driver.rollback_setup("hostname r1\n!\nline vty 0 4\n") == ["archive", " path flash0:ncs-archive",
+                                                                       " maximum 5"]
+    assert driver.rollback_setup("hostname r1\narchive\n path flash0:x\n maximum 5\n!\n") == []
     assert steps["begin"] == ["configure terminal revert timer 7"]
     assert steps["confirm"] == ["configure confirm"] and steps["revert"] == ["configure revert now"]
     assert driver.save_command() == "write memory" and driver.rollback_strategy() == "revert_timer"

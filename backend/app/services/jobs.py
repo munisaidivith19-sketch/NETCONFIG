@@ -39,6 +39,7 @@ from ..errors import ApiError
 from ..models.common import oid
 from ..models.job import CANCELLABLE, RUNNING, TERMINAL, JobCreate, RunRequest
 from ..models.plan import ConfigPlan
+from ..security.rbac import require_owner_or_admin
 from ..security.sessions import SessionUser
 from . import audit, planning, validation, wizards
 from .connection import ConnectFailed, ConnectParams
@@ -265,7 +266,7 @@ def approve(db: Database, user: SessionUser, job_id: str, request_id: str) -> di
         raise ApiError(403, "Two-person rule: you cannot approve your own request.")
     now = clock.now()
     if now >= doc["approval"]["expires_at"]:
-        expire_sweep(db)
+        _expire(db, doc["_id"])
         raise ApiError(409, "This request expired (not approved within 24 hours).")
     new = _move(db, doc["_id"], ("awaiting_approval",), "ready",
                 {"approval.approved_by": {"id": user.user_id, "username": user.username}, "approval.approved_at": now},
@@ -291,8 +292,7 @@ def reject(db: Database, user: SessionUser, job_id: str, reason: str, request_id
 
 
 def _owner_or_admin(doc: dict, user: SessionUser) -> None:
-    if doc["requested_by"]["id"] != user.user_id and user.role != "admin":
-        raise ApiError(403, "Only the requester or an admin can do this.")
+    require_owner_or_admin(doc["requested_by"], user, "Only the requester or an admin can do this.")
 
 
 def merge_secrets(plan_doc: dict, req: RunRequest) -> ConfigPlan:
@@ -300,18 +300,16 @@ def merge_secrets(plan_doc: dict, req: RunRequest) -> ConfigPlan:
     data = json.loads(json.dumps(plan_doc))
     missing: dict[str, str] = {}  # RunRequest field name -> explanation
     ssh = data.get("ssh")
-    wanted = [] if not ssh else [
-        ("ssh_user_password", "password", True, f"the plan creates local user {ssh['username']}"),
-        ("new_enable_secret", "enable_secret", bool(ssh.get("set_enable_secret")), "the plan sets the enable secret"),
-    ]
-    for field_name, plan_key, needed, why in wanted:
-        value = getattr(req, field_name)
-        if not needed:
-            continue
-        if value is None:
-            missing[field_name] = f"required: {why}"
+    if ssh:
+        if req.ssh_user_password is None:
+            missing["ssh_user_password"] = f"required: the plan creates local user {ssh['username']}"
         else:
-            ssh[plan_key] = value.get_secret_value()
+            ssh["password"] = req.ssh_user_password.get_secret_value()
+        if ssh.get("set_enable_secret"):
+            if req.new_enable_secret is None:
+                missing["new_enable_secret"] = "required: the plan sets the enable secret"  # noqa: S105 - a message
+            else:
+                ssh["enable_secret"] = req.new_enable_secret.get_secret_value()
     if missing:
         raise ApiError(422, "Some secrets are missing.", fields=missing)
     return ConfigPlan.model_validate(data)
@@ -649,27 +647,7 @@ class Execution:
                 results[0] = engines[0].abort(held.pop(0), f"Rolled back because {b_name} failed, so the link "
                                                            "stays the same on both sides.")
             else:
-                # Each confirm cancels that device's revert timer. Both are confirmed before either is saved, so
-                # the moment when one side is kept and the other may still revert is as short as possible.
-                results[0] = engines[0].confirm(held[0])
-                if results[0] is not None:  # A was not confirmed and reverts: roll B back too
-                    del held[0]
-                    results[1] = engines[1].abort(held.pop(1), f"Rolled back because {a_name} could not be "
-                                                               "confirmed, so the link stays the same on both sides.")
-                else:
-                    results[1] = engines[1].confirm(held[1])
-                    if results[1] is None:
-                        results[0] = engines[0].save(held.pop(0))
-                        results[1] = engines[1].save(held.pop(1))
-                    else:
-                        # B reverts by itself, but A is already confirmed: its timer is gone and no lab-tested
-                        # command can undo it. Do not save A, so its startup config still matches B's.
-                        del held[1]
-                        results[0] = engines[0].keep_unsaved(held.pop(0), (
-                            f"{b_name} was not confirmed and restores its old configuration, but {a_name} was "
-                            f"already confirmed, so the link is configured on {a_name} only. It was NOT saved on "
-                            f"{a_name}: remove the link configuration from {a_name} (or reload it), or fix "
-                            f"{b_name} and run the link again."))
+                self._confirm_both(engines, held, results, a_name, b_name)
         except Exception as exc:  # noqa: BLE001 - e.g. a database error: never leave a side half-done
             for i in (0, 1):
                 if i in held:
@@ -682,6 +660,31 @@ class Execution:
             if self.current[i] not in TERMINAL:  # a skipped step is already stored
                 self._store(i, results[i])
         return results
+
+    @staticmethod
+    def _confirm_both(engines: list[PushEngine], held: dict[int, Held], results: list, a_name: str,
+                      b_name: str) -> None:
+        """Both sides applied and verified. Each confirm cancels that device's revert timer; both are confirmed
+        before either is saved, so the moment when one side is kept and the other may still revert is as short
+        as possible. ``held``/``results`` are updated in place: _link's error handler reads them."""
+        results[0] = engines[0].confirm(held[0])
+        if results[0] is not None:  # A was not confirmed and reverts: roll B back too
+            del held[0]
+            results[1] = engines[1].abort(held.pop(1), f"Rolled back because {a_name} could not be confirmed, "
+                                                       "so the link stays the same on both sides.")
+            return
+        results[1] = engines[1].confirm(held[1])
+        if results[1] is not None:
+            # B reverts by itself, but A is already confirmed: its timer is gone and no lab-tested command can
+            # undo it. Do not save A, so its startup config still matches B's.
+            del held[1]
+            results[0] = engines[0].keep_unsaved(held.pop(0), (
+                f"{b_name} was not confirmed and restores its old configuration, but {a_name} was already "
+                f"confirmed, so the link is configured on {a_name} only. It was NOT saved on {a_name}: remove "
+                f"the link configuration from {a_name} (or reload it), or fix {b_name} and run the link again."))
+            return
+        results[0] = engines[0].save(held.pop(0))
+        results[1] = engines[1].save(held.pop(1))
 
     # -- bootstrap: prove SSH works before switching the device to it
     def _ssh_switch(self, i: int, res: StepResult, step: StepInput) -> None:

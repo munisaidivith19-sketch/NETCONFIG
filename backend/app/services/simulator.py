@@ -16,8 +16,7 @@ ZERO = str(ipaddress.IPv4Address(0))  # 0.0.0.0 as display text / OSPF wildcard 
 HEADERS = ("interface ", "vlan ", "line ", "router ", "ip dhcp pool ", "ip access-list ", "archive")
 REPLACE_PREFIXES = ("description", "ip address", "switchport access vlan", "switchport mode",
                     "switchport trunk native", "switchport trunk allowed", "name", "exec-timeout", "transport input",
-                    "router-id", "eigrp router-id", "bgp router-id", "default-router", "network", "dns-server",
-                    "lease", "path", "maximum")
+                    "router-id", "eigrp router-id", "bgp router-id", "default-router", "lease", "path", "maximum")
 TOP_REPLACE = ("hostname", "ip domain name", "login block-for", "banner motd", "enable secret",
                "ip default-gateway")
 SHORT = {"GigabitEthernet": "Gi", "FastEthernet": "Fa", "TenGigabitEthernet": "Te", "TwoGigabitEthernet": "Tw",
@@ -51,7 +50,7 @@ class SimulatedDevice:
             body = self.sections.setdefault(self.context, [])
             text = line.rstrip()
             key = next((p for p in REPLACE_PREFIXES if text.strip().startswith(p + " ")), None)
-            if key and key not in ("network", "dns-server"):
+            if key:  # "network" / "dns-server" lines can repeat, so they are never replaced
                 body[:] = [b for b in body if not b.strip().startswith(key + " ")]
             if text not in body:
                 body.append(text)
