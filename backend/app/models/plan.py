@@ -9,6 +9,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field, SecretStr, StringConstraints, field_validator, model_validator
 
+from ..security.masking import mask_text
 from .common import StrictModel
 
 SAFE_TEXT = r"^[A-Za-z0-9 _.,:/()@+=-]*$"
@@ -203,6 +204,17 @@ class ConfigPlan(StrictModel):
     custom_commands: list[CustomCommand] = Field(default_factory=list, max_length=50)
     save: bool = True
     revert_minutes: int = Field(default=10, ge=2, le=120)
+
+    @field_validator("custom_commands")
+    @classmethod
+    def _no_secret_in_custom(cls, commands: list[str]) -> list[str]:
+        # Custom commands are stored as typed (job, template), and viewers can read jobs. A line that the masking
+        # would change carries a secret (community, key, password): refuse it instead of storing it (8.3).
+        for line in commands:
+            if mask_text(line) != line:
+                raise ValueError("custom commands must not contain passwords, keys or SNMP communities "
+                                 "(they would be stored in the job record)")
+        return commands
 
     def features(self) -> list[str]:
         """Capability names this plan uses (matches the OS driver capability matrix)."""

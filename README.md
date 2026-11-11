@@ -109,6 +109,9 @@ Static checks: `ruff check .`, `bandit -c pyproject.toml -r app scripts`, `pip-a
 - **SSH host keys are pinned** on first connection. If a device later offers a different key, the push stops
   before the password is sent, until an admin compares and accepts the new fingerprint (Admin → SSH host keys).
 - **Two-person rule** for `production` devices, and **automatic rollback** (Cisco revert timer).
+  A job runs only against the address and connection method it was previewed (and approved) for, and only
+  an admin can change the address, connection or model of a `production` device.
+- **Custom commands** may not contain passwords, keys or SNMP communities (they are stored in the job record).
 - **Audit log** is append-only with a hash chain, so edits or deletions are detectable.
 - **No CLI injection:** every text field in a plan uses a character allowlist (no newline, `;`, `|`,
   `#`, `^`, `?`), so a hostname, description or banner can never start a second command. The final
@@ -136,6 +139,6 @@ scripts/   Windows helper scripts
 | 2 | 2C review | done |
 | 3 | 3A safe push engine, approvals, live progress, History, SSH host keys | done |
 | 3 | 3B console bootstrap, router link wizard, multi-device, templates | done (lab checklist in `docs/LAB_TESTING.md` not run yet) |
-| 3 | 3C review | – |
+| 3 | 3C review (code review, simplify, security review) | done |
 | 4 | Multi-vendor drivers, live dashboard, UI polish | – |
 | 5 | AI assistant, hardening, docs, release | – |

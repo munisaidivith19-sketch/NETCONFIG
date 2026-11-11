@@ -302,3 +302,36 @@ def test_viewer_reads_history_but_cannot_act(client_for, runner):
     assert "backup" in eng.get(f"/api/jobs/{job['id']}").json()["steps"][0]
     assert viewer.post(f"/api/jobs/{job['id']}/run", json=CREDS).status_code == 403
     assert viewer.get("/api/jobs", params={"status": "nonsense"}).status_code == 422
+
+
+def test_job_refused_when_device_address_moved_after_creation(client_for, runner):
+    """Security review 3C: the job goes only where it was previewed (and approved)."""
+    eng = client_for("engineer")
+    dev = make_device(eng)
+    job = create_job(eng, dev)
+    assert eng.patch(f"/api/devices/{dev['id']}", json={"mgmt_ip": "10.0.0.9"}).status_code == 200
+    r = eng.post(f"/api/jobs/{job['id']}/run", json=RUN)
+    assert r.status_code == 409 and "address or connection changed" in r.json()["error"]["message"]
+
+
+def test_engineer_cannot_move_a_production_device(client_for):
+    """Security review 3C: moving the address of a production device to an untagged record skipped approval."""
+    admin, eng = client_for("admin"), client_for("engineer")
+    dev = make_device(admin, tags=["production"])
+    for change in ({"mgmt_ip": "10.9.9.9"}, {"connection": {"method": "telnet_lab"}}, {"model_id": "cisco-iosv"}):
+        r = eng.patch(f"/api/devices/{dev['id']}", json=change)
+        assert r.status_code == 403, (change, r.text)
+    assert eng.patch(f"/api/devices/{dev['id']}", json={"location": "Rack 2"}).status_code == 200
+    assert admin.patch(f"/api/devices/{dev['id']}", json={"mgmt_ip": "10.9.9.9"}).status_code == 200
+
+
+@pytest.mark.parametrize("line", ["snmp-server community N0tPublic RW", "username ops privilege 15 secret Passw0rd99",
+                                  "tacacs-server key S3cr3tKey"])
+def test_custom_command_with_a_secret_is_refused(client_for, line):
+    """Security review 3C: custom commands are stored as typed and viewers can read jobs and templates."""
+    eng = client_for("engineer")
+    dev = make_device(eng)
+    r = eng.post("/api/jobs", json={"device_id": dev["id"], "plan": {**PLAN, "custom_commands": [line]}})
+    assert r.status_code == 422 and "N0tPublic" not in r.text and "Passw0rd99" not in r.text
+    r = eng.post("/api/templates", json={"name": "t1", "plan": {"custom_commands": [line]}})
+    assert r.status_code == 422

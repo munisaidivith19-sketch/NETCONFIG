@@ -391,6 +391,12 @@ class JobRunner:
         devices = [self.db.devices.find_one({"_id": s["device_id"]}) for s in doc["steps"]]
         if not all(devices):
             raise ApiError(409, "A device of this job was removed from the inventory.")
+        for s, device in zip(doc["steps"], devices, strict=True):
+            # The job goes where it was previewed and approved: same address, same connection method.
+            if (device.get("mgmt_ip"), device.get("connection", {}).get("method")) != (s.get("mgmt_ip"),
+                                                                                      s.get("connection")):
+                raise ApiError(409, f"{device['name']}'s address or connection changed since this job was created; "
+                                    "create a new job.")
         missing = {}
         for device in devices:
             if device.get("connection", {}).get("method") == "ssh" and req.login_for(str(device["_id"]))[0] is None:

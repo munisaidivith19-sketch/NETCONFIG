@@ -63,6 +63,15 @@ def _check_production_change(user: SessionUser, before: list[str], after: list[s
                        fields={"tags": "production tag needs an admin"})
 
 
+def _check_production_target(user: SessionUser, doc: dict, changes: dict) -> None:
+    """On a production device, where it is (address, connection) and what it is (model) are admin-only too.
+    Otherwise an engineer could move its address to an untagged record and push to it without approval."""
+    moved = {k for k in ("mgmt_ip", "connection", "model_id") if k in changes and changes[k] != doc.get(k)}
+    if moved and PRODUCTION_TAG in doc.get("tags", []) and RANK[user.role] < RANK["admin"]:
+        raise ApiError(403, "Only an admin can change the address, connection or model of a production device.",
+                       fields={k: "production device: needs an admin" for k in sorted(moved)})
+
+
 def _validation_error(exc: ValidationError) -> ApiError:
     fields = {}
     for e in exc.errors():
@@ -145,6 +154,7 @@ def update_device(device_id: str, body: DeviceUpdate, request: Request,
         raise _validation_error(exc) from exc
     model = _check_model(db, validated)
     _check_production_change(user, doc.get("tags", []), validated.tags)
+    _check_production_target(user, doc, {k: v for k, v in validated.model_dump().items() if k in changes})
     update = {**validated.model_dump(), "os_id": model["os_id"], "updated_at": clock.now()}
     try:
         db.devices.update_one({"_id": doc["_id"]}, {"$set": update})
