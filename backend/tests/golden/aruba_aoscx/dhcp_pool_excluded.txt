@@ -1,0 +1,13 @@
+interface 1/1/1
+    no shutdown
+    routing
+    ip address 10.0.30.1/24
+dhcp-server vrf default
+    pool GUEST
+        range 10.0.30.21 10.0.30.253 prefix-len 24
+        default-router 10.0.30.1
+        dns-server 9.9.9.9 1.1.1.1
+        domain-name guest.example.net
+        lease 02:00:00
+        exit
+    enable

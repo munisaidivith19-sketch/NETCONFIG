@@ -161,9 +161,7 @@ def validate_plan(plan: ConfigPlan, *, model: ModelInfo, capabilities: set[str],
             r.unsupported.append({"feature": feature, "message": msg})
             r.error(FEATURE_PATHS[feature], msg)
 
-    # SSH needs a hostname and domain name before RSA keys can be generated.
-    if plan.ssh and not (plan.basic and plan.basic.domain):
-        r.error("basic.domain" if plan.basic else "basic", "SSH needs a hostname and a domain name (for its RSA keys)")
+    # OS-specific rules (e.g. Cisco: SSH needs a domain name for its RSA keys) are in each driver's review().
 
     # VLANs
     seen_vlans: dict[int, int] = {}

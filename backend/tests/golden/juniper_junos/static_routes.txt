@@ -1,0 +1,4 @@
+set routing-options static route 0.0.0.0/0 next-hop 203.0.113.1
+set routing-options static route 192.168.50.0/24 next-hop 10.0.0.2
+set routing-options static route 192.168.50.0/24 preference 200
+set routing-options static route 172.16.0.0/16 next-hop ge-0/0/0.0

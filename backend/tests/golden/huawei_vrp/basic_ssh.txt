@@ -1,0 +1,15 @@
+sysname access-sw1
+aaa
+ local-user netadmin password irreversible-cipher ********
+ local-user netadmin privilege level 15
+ local-user netadmin service-type ssh
+ quit
+stelnet server enable
+ssh user netadmin
+ssh user netadmin authentication-type password
+ssh user netadmin service-type stelnet
+user-interface vty 0 4
+ authentication-mode aaa
+ protocol inbound ssh
+ idle-timeout 15 0
+ quit

@@ -1,0 +1,26 @@
+{
+  "model_id": "arista-ceos-lab",
+  "plan": {
+    "interfaces": [
+      {
+        "interface": "Ethernet1",
+        "ip": "203.0.113.2/30",
+        "description": "ISP"
+      },
+      {
+        "interface": "Ethernet2",
+        "ip": "10.0.0.1/24",
+        "description": "LAN"
+      }
+    ],
+    "nat": {
+      "inside_interfaces": [
+        "Ethernet2"
+      ],
+      "outside_interface": "Ethernet1",
+      "inside_networks": [
+        "10.0.0.0/24"
+      ]
+    }
+  }
+}

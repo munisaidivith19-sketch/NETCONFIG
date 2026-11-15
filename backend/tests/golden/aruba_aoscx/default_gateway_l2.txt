@@ -1,0 +1,7 @@
+vlan 99
+    name MGMT
+interface vlan 99
+    description management
+    ip address 10.10.10.2/24
+    no shutdown
+ip route 0.0.0.0/0 10.10.10.1

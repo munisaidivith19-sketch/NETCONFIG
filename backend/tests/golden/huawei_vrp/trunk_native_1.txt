@@ -1,0 +1,11 @@
+vlan 10
+ name Sales
+ quit
+vlan 20
+ name Engineering
+ quit
+interface XGigabitEthernet0/0/1
+ port link-type trunk
+ port trunk allow-pass vlan 10 20
+ undo port trunk allow-pass vlan 1
+ quit

@@ -1,0 +1,9 @@
+set vlans Engineering vlan-id 20
+set interfaces ge-0/0/0 description "Eng desks"
+set interfaces ge-0/0/0 unit 0 family ethernet-switching interface-mode access
+set interfaces ge-0/0/0 unit 0 family ethernet-switching vlan members 20
+set protocols rstp interface ge-0/0/0 edge
+set interfaces ge-0/0/1 description "Eng desks"
+set interfaces ge-0/0/1 unit 0 family ethernet-switching interface-mode access
+set interfaces ge-0/0/1 unit 0 family ethernet-switching vlan members 20
+set protocols rstp interface ge-0/0/1 edge

@@ -1,0 +1,14 @@
+vlan 20
+    name Engineering
+interface 1/1/1
+    description Eng desks
+    no shutdown
+    no routing
+    vlan access 20
+    spanning-tree port-type admin-edge
+interface 1/1/2
+    description Eng desks
+    no shutdown
+    no routing
+    vlan access 20
+    spanning-tree port-type admin-edge

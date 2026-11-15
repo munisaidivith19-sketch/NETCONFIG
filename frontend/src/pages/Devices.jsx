@@ -1,11 +1,118 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Pencil, Plus, Search, Server, ShieldAlert, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { Cable, Camera, Pencil, Plus, Search, Server, ShieldAlert, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { del, get, patch, post } from '../lib/api.js'
 import { useAuth } from '../lib/auth.jsx'
 import { CATEGORIES, CONNECTIONS, SUPPORT, categoryIcon, categoryLabel } from '../lib/labels.js'
 import DeviceForm from '../components/DeviceForm.jsx'
-import { Alert, Badge, Dialog, Empty, ErrorNote, PageHeader, Panel, SkeletonRows, formatDate } from '../components/ui.jsx'
+import { Alert, Badge, Dialog, Empty, ErrorNote, Field, PageHeader, Panel, SkeletonRows, formatDate } from '../components/ui.jsx'
+
+const FACT_LABELS = [['manufacturer', 'Manufacturer'], ['model', 'Model'], ['firmwareversion', 'Firmware'],
+  ['version', 'Software'], ['serialnumber', 'Serial number'], ['serial', 'Serial number'], ['hostname', 'Host name']]
+
+// Read-only facts read from the device (ONVIF for cameras, "show version" for switches and routers).
+function Facts({ facts }) {
+  if (!facts) return null
+  const rows = FACT_LABELS.filter(([k]) => facts[k])
+  if (!rows.length) return null
+  return (
+    <div className="stack">
+      <h3 className="faint" style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
+        Read from the device ({facts.source === 'onvif' ? 'ONVIF' : 'show commands'}, {formatDate(facts.read_at)})
+      </h3>
+      <dl className="facts">
+        {rows.map(([k, label]) => (
+          <div key={k}><dt className="faint">{label}</dt><dd className="mono">{facts[k]}</dd></div>
+        ))}
+      </dl>
+    </div>
+  )
+}
+
+// Camera login for one ONVIF read. It lives in this component's state only and is cleared after the request.
+function OnvifRead({ device, onDone }) {
+  const [form, setForm] = useState({ username: '', password: '', port: '80' })
+  const [error, setError] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const fields = error?.fields || {}
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+
+  async function submit(e) {
+    e.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      const updated = await post(`/devices/${device.id}/onvif`, { username: form.username.trim(), password: form.password, port: Number(form.port) || 80 })
+      onDone(updated)
+    } catch (err) {
+      setError(err)
+    } finally {
+      setForm((f) => ({ ...f, password: '' }))
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form className="stack" onSubmit={submit} noValidate>
+      <p className="faint" style={{ margin: 0 }}>
+        Reads manufacturer, model, firmware and serial number over ONVIF. Nothing on the camera is changed and the
+        login is not stored.
+      </p>
+      <ErrorNote error={error} />
+      <div className="form-grid">
+        <Field label="Camera user" error={fields.username}>
+          {(p) => <input {...p} className="input" value={form.username} onChange={set('username')} maxLength={64} autoComplete="off" required />}
+        </Field>
+        <Field label="Camera password" error={fields.password}>
+          {(p) => <input {...p} className="input" type="password" value={form.password} onChange={set('password')} maxLength={128} autoComplete="off" required />}
+        </Field>
+        <Field label="HTTP port" error={fields.port}>
+          {(p) => <input {...p} className="input" type="number" min={1} max={65535} value={form.port} onChange={set('port')} />}
+        </Field>
+      </div>
+      <div className="form-actions">
+        <button type="submit" className="btn" disabled={busy || !form.username || !form.password}>
+          <Camera size={16} aria-hidden="true" /> {busy ? 'Reading…' : 'Read camera information'}
+        </button>
+      </div>
+    </form>
+  )
+}
+
+function UplinkInfo({ device, can }) {
+  const [sw, setSw] = useState(null)
+  useEffect(() => {
+    if (!device.uplink) return setSw(null)
+    get(`/devices/${device.uplink.device_id}`).then(setSw).catch(() => setSw(null))
+  }, [device.uplink])
+  const isAp = device.category === 'ap'
+  return (
+    <>
+      {isAp && (
+        <Alert tone="info" title="Managed by its wireless controller.">
+          NetConfig Studio does not configure the access point itself. It configures the switch port the access point
+          is plugged into.
+        </Alert>
+      )}
+      {!device.uplink ? (
+        <p className="faint" style={{ margin: 0 }}>No uplink switch port recorded. Edit the device to add one.</p>
+      ) : (
+        <div className="row">
+          <span>
+            <Cable size={16} aria-hidden="true" /> Plugged into{' '}
+            <strong>{sw?.name || 'a switch'}</strong> port <span className="mono">{device.uplink.interface}</span>
+          </span>
+          {can('engineer') && sw && sw.support !== 'inventory' && (
+            <Link className="btn primary"
+              to={`/configure?${new URLSearchParams({ device: sw.id, port: device.uplink.interface, for: device.name })}`}>
+              <SlidersHorizontal size={16} aria-hidden="true" /> Configure switch port
+            </Link>
+          )}
+        </div>
+      )}
+    </>
+  )
+}
 
 function StatusBadge({ status }) {
   if (status?.reachable === true) return <Badge tone="success" dot>Reachable</Badge>
@@ -158,6 +265,11 @@ export default function Devices() {
                 <div><dt className="faint">Added</dt><dd style={{ margin: 0 }}>{formatDate(selected.created_at)}</dd></div>
               </dl>
               {selected.connection.method === 'telnet_lab' && <Alert tone="warning">Lab console over telnet – unencrypted.</Alert>}
+              {(selected.category === 'ap' || selected.category === 'camera') && <UplinkInfo device={selected} can={can} />}
+              <Facts facts={selected.facts} />
+              {selected.category === 'camera' && can('engineer') && selected.mgmt_ip && (
+                <OnvifRead key={selected.id} device={selected} onDone={(d) => { setSelected(d); setNotice(`Read the camera information of ${d.name}.`); load() }} />
+              )}
               <div className="row">
                 {can('engineer') && selected.support !== 'inventory' && (
                   <Link className="btn primary" to={`/configure?device=${selected.id}`}>

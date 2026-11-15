@@ -1,0 +1,25 @@
+{
+  "model_id": "mikrotik-crs326-24g-2s",
+  "plan": {
+    "vlans": [
+      {
+        "id": 10,
+        "name": "Sales"
+      },
+      {
+        "id": 20,
+        "name": "Engineering"
+      }
+    ],
+    "trunks": [
+      {
+        "interface": "sfp-sfpplus1",
+        "allowed_vlans": [
+          10,
+          20
+        ],
+        "native_vlan": 1
+      }
+    ]
+  }
+}

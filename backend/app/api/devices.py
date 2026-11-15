@@ -9,15 +9,18 @@ from pymongo.errors import DuplicateKeyError
 from .. import clock
 from ..errors import ApiError, field_path
 from ..models.common import oid
-from ..models.device import PRODUCTION_TAG, DeviceCreate, DeviceOut, DeviceUpdate
+from ..models.device import PRODUCTION_TAG, DeviceCreate, DeviceOut, DeviceUpdate, OnvifRequest
+from ..security.ratelimit import RateLimiter
 from ..security.rbac import RANK, require_admin, require_engineer, require_viewer
 from ..security.sessions import SessionUser
-from ..services import audit
+from ..services import audit, onvif
 from ..services.catalog import effective_capabilities
 from .deps import get_db, rid
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
 CI = Collation(locale="en", strength=2)
+UPLINK_CATEGORIES = ("ap", "camera")
+onvif_limit = RateLimiter(limit=10, window_seconds=60)
 
 
 def _device_out(db: Database, doc: dict, cache: dict | None = None) -> DeviceOut:
@@ -40,7 +43,8 @@ def _device_out(db: Database, doc: dict, cache: dict | None = None) -> DeviceOut
         capabilities=effective_capabilities(driver, model), mgmt_ip=doc.get("mgmt_ip"),
         connection=doc.get("connection", {}), location=doc.get("location", ""), tags=doc.get("tags", []),
         production=PRODUCTION_TAG in doc.get("tags", []), status=doc.get("status", {}),
-        created_at=doc.get("created_at"), updated_at=doc.get("updated_at"),
+        uplink=doc.get("uplink"), facts=doc.get("facts"), created_at=doc.get("created_at"),
+        updated_at=doc.get("updated_at"),
     )
 
 
@@ -54,6 +58,24 @@ def _check_model(db: Database, body: DeviceCreate) -> dict:
         raise ApiError(422, "This device does not support that connection method.",
                        fields={"connection.method": f"use one of: {', '.join(sorted(allowed))}"})
     return model
+
+
+def _check_uplink(db: Database, body: DeviceCreate, model: dict, self_id=None) -> None:
+    """An uplink points at a switch port in the inventory, and only APs and cameras have one."""
+    if body.uplink is None:
+        return
+    if model.get("category") not in UPLINK_CATEGORIES:
+        raise ApiError(422, "Only access points and cameras have an uplink switch port.", fields={"uplink": "not used"})
+    switch = db.devices.find_one({"_id": oid(body.uplink.device_id)})
+    switch_model = db.catalog_models.find_one({"_id": switch["model_id"]}) if switch else None
+    if not switch or switch["_id"] == self_id or (switch_model or {}).get("category") not in ("switch", "l3switch"):
+        raise ApiError(422, "The uplink must be a switch in the inventory.",
+                       fields={"uplink.device_id": "not a switch"})
+    pattern = switch_model.get("port_pattern") or ""
+    if pattern and not re.fullmatch(pattern, body.uplink.interface):
+        examples = ", ".join(switch_model.get("port_examples", []))
+        raise ApiError(422, "That port does not exist on the switch model.",
+                       fields={"uplink.interface": f"use the full port name, e.g. {examples}"})
 
 
 def _check_production_change(user: SessionUser, before: list[str], after: list[str]) -> None:
@@ -117,6 +139,7 @@ def list_devices(
 def create_device(body: DeviceCreate, request: Request, user: SessionUser = Depends(require_engineer),
                   db: Database = Depends(get_db)) -> DeviceOut:
     model = _check_model(db, body)
+    _check_uplink(db, body, model)
     _check_production_change(user, [], body.tags)
     now = clock.now()
     doc = {**body.model_dump(), "os_id": model["os_id"], "status": {"reachable": None, "checked_at": None},
@@ -153,6 +176,7 @@ def update_device(device_id: str, body: DeviceUpdate, request: Request,
     except ValidationError as exc:
         raise _validation_error(exc) from exc
     model = _check_model(db, validated)
+    _check_uplink(db, validated, model, self_id=doc["_id"])
     _check_production_change(user, doc.get("tags", []), validated.tags)
     _check_production_target(user, doc, {k: v for k, v in validated.model_dump().items() if k in changes})
     update = {**validated.model_dump(), "os_id": model["os_id"], "updated_at": clock.now()}
@@ -175,3 +199,29 @@ def delete_device(device_id: str, request: Request, user: SessionUser = Depends(
     audit.record(db, "device.delete", who=user, target={"type": "device", "id": device_id},
                  details={"name": doc["name"]}, request_id=rid(request))
     return {"ok": True}
+
+
+@router.post("/{device_id}/onvif")
+def read_onvif(device_id: str, body: OnvifRequest, request: Request, user: SessionUser = Depends(require_engineer),
+               db: Database = Depends(get_db)) -> DeviceOut:
+    """Read a camera's ONVIF device information (read only). The login is used for this request only."""
+    doc = db.devices.find_one({"_id": oid(device_id)})
+    if not doc:
+        raise ApiError(404, "Device not found.")
+    model = db.catalog_models.find_one({"_id": doc["model_id"]}) or {}
+    if model.get("category") != "camera" or not doc.get("mgmt_ip"):
+        raise ApiError(422, "ONVIF information can only be read from a camera with a management address.")
+    if not onvif_limit.allow(user.user_id):
+        raise ApiError(429, "Too many camera requests; wait a minute.")
+    target = {"type": "device", "id": device_id}
+    try:
+        info = onvif.get_device_information(doc["mgmt_ip"], body.port, body.username, body.password)
+    except onvif.OnvifError as exc:
+        audit.record(db, "device.onvif_read", who=user, target=target, result="failed",
+                     details={"error": str(exc)}, request_id=rid(request))
+        raise ApiError(502, str(exc)) from exc
+    facts = {"source": "onvif", "read_at": clock.now(), **{k.lower(): v for k, v in info.items()}}
+    db.devices.update_one({"_id": doc["_id"]}, {"$set": {"facts": facts}})
+    audit.record(db, "device.onvif_read", who=user, target=target, details={"port": body.port},
+                 request_id=rid(request))
+    return _device_out(db, db.devices.find_one({"_id": doc["_id"]}))

@@ -10,7 +10,7 @@ import { Alert, Badge, Checkbox, Empty, ErrorNote, PageHeader, Panel, SkeletonRo
 import { get, post } from '../lib/api.js'
 import { useJob } from '../lib/useJob.js'
 import { SUPPORT, categoryIcon, categoryLabel } from '../lib/labels.js'
-import { emptyForm, normalizeErrors, sectionOf, toPlan } from '../lib/plan.js'
+import { NEW_ROWS, emptyForm, normalizeErrors, sectionOf, toPlan } from '../lib/plan.js'
 
 const SWITCHES = ['switch', 'l3switch']
 const MAX_SWITCHES = 20
@@ -270,6 +270,12 @@ export default function Configure() {
       .then(async (d) => {
         const model = await get(`/catalog/models/${d.model_id}`)
         setTarget({ kind: 'device', id: d.id, name: d.name, model, capabilities: new Set(d.capabilities), production: d.production, support: model.os_driver?.support, os: model.os_driver?.name, device: d })
+        // ...&port=<if>&for=<ap> (link from an access point or camera): start with an access port for that uplink.
+        const port = params.get('port')
+        if (port) {
+          const forName = (params.get('for') || '').replace(/[^A-Za-z0-9._ -]/g, '').slice(0, 60)
+          setForm((f) => ({ ...f, access: [{ ...NEW_ROWS.access(), interfaces: port, description: forName }] }))
+        }
         setStep(1)
       })
       .catch(() => {})

@@ -1,0 +1,5 @@
+set system host-name core1
+set system domain-name lab.example.net
+set system login user netadmin class super-user
+set system login user netadmin authentication encrypted-password ********
+set system services ssh protocol-version v2

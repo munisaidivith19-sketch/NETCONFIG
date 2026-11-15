@@ -1,0 +1,12 @@
+{
+  "model_id": "tplink-tl-sg2210p",
+  "plan": {
+    "hardening": {
+      "banner": "Authorised access only"
+    }
+  },
+  "expect_errors": {
+    "hardening.login_block": "not supported",
+    "hardening.banner": "not supported"
+  }
+}

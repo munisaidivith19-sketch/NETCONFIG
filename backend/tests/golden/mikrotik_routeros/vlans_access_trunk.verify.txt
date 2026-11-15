@@ -1,0 +1,3 @@
+/interface bridge print terse
+/interface bridge vlan print terse
+/interface bridge port print terse

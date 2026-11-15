@@ -72,8 +72,8 @@ def test_inventory_only_model_cannot_be_configured(client_for):
     eng = client_for("engineer")
     body = eng.post(URL, json={"model_id": "tplink-tl-sg1016d", "plan": {}}).json()
     assert not body["ok"] and "cannot configure" in body["errors"]["model_id"]
-    body = eng.post(URL, json={"model_id": "arista-ceos-lab", "plan": {}}).json()
-    assert "planned" in body["errors"]["model_id"]
+    body = eng.post(URL, json={"model_id": "mikrotik-chr", "plan": {}}).json()  # experimental, flag off
+    assert "ENABLE_EXPERIMENTAL_DRIVERS" in body["errors"]["model_id"]
 
 
 def test_unknown_targets_404(client_for):

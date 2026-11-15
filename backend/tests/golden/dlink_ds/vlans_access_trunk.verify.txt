@@ -1,0 +1,2 @@
+show vlan
+show port_vlan pvid

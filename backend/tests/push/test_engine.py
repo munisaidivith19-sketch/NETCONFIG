@@ -80,7 +80,7 @@ def test_informational_lines_are_not_errors():
 def test_p3_unreachable_after_apply_relies_on_timer():
     result, _, fake = run(fake=FakeConnection(unreachable_after_apply=True))
     assert result.status == "rolled_back"
-    assert any("revert timer" in n for n in result.notes)
+    assert any("rollback timer" in n for n in result.notes)
     assert ("exec", "configure confirm") not in fake.sent
 
 

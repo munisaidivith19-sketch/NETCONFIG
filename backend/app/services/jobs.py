@@ -49,7 +49,7 @@ from .push import Held, PushEngine, StepInput, StepResult
 log = logging.getLogger("netconfig.jobs")
 APPROVAL_HOURS = 24
 INTERRUPTED = ("Interrupted (the app stopped) – verify the device state. "
-               "A Cisco device restores its old config by its revert timer.")
+               "A device with a rollback timer (Cisco, Junos, EOS, AOS-CX) restores its old config by itself.")
 SKIPPED = "cancelled"  # a step that never started (an earlier step failed, or the job was withdrawn)
 
 # Allowed status changes of one step (tests/unit/test_job_states.py checks this table). The job status
@@ -307,7 +307,7 @@ def merge_secrets(plan_doc: dict, req: RunRequest) -> ConfigPlan:
             ssh["password"] = req.ssh_user_password.get_secret_value()
         if ssh.get("set_enable_secret"):
             if req.new_enable_secret is None:
-                missing["new_enable_secret"] = "required: the plan sets the enable secret"  # noqa: S105 - a message
+                missing["new_enable_secret"] = "required: the plan sets the enable secret"  # noqa: S105  # nosec B105
             else:
                 ssh["enable_secret"] = req.new_enable_secret.get_secret_value()
     if missing:
@@ -564,7 +564,7 @@ class Execution:
                   "username": username, "password": password, "secret": secret,
                   "serial_port": conn.get("serial_port"), "baud": conn.get("baud") or 9600, **override}
         values["port"] = values["port"] or (23 if values["method"] == "telnet_lab" else 22)
-        return ConnectParams(device_type=driver.netmiko_device_type, **values)
+        return ConnectParams(device_type=driver.netmiko_device_type, config_prompt=driver.config_prompt, **values)
 
     def _input(self, i: int) -> StepInput:
         step, device = self.doc["steps"][i], self.devices[i]

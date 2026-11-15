@@ -36,6 +36,7 @@ class FakeConnection:
         self.exec_responses = exec_responses or {}
         self.rsa_prompt = rsa_prompt
         self.sent: list[tuple[str, str]] = []
+        self.answered: list[str] = []  # answers given to exec questions (Huawei "save" [Y/N])
         self.gone = False
         self.closed = 0
 
@@ -73,9 +74,11 @@ class FakeConnection:
             self.gone = True
         return ""
 
-    def exec(self, command):
+    def exec(self, command, prompts=None):
         self._alive()
         self.sent.append(("exec", command))
+        if prompts:
+            self.answered.extend(answer for _p, answer in prompts)
         return self.exec_responses.get(command, "")
 
     def close(self):

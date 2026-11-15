@@ -1,0 +1,22 @@
+{
+  "model_id": "arista-ceos-lab",
+  "plan": {
+    "vlans": [
+      {
+        "id": 99,
+        "name": "MGMT"
+      }
+    ],
+    "svis": [
+      {
+        "vlan": 99,
+        "ip": "10.10.10.2/24",
+        "description": "management"
+      }
+    ],
+    "default_gateway": "10.10.10.1"
+  },
+  "expect_errors": {
+    "default_gateway": "static route 0.0.0.0/0"
+  }
+}

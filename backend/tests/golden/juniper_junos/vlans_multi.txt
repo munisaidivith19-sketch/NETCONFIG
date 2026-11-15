@@ -1,0 +1,4 @@
+set vlans Sales vlan-id 10
+set vlans Engineering vlan-id 20
+set vlans Voice_IP vlan-id 30
+set vlans Mgmt-Net vlan-id 99

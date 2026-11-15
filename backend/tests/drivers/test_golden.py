@@ -1,5 +1,6 @@
 """Golden-file tests: plan in tests/golden/<os_id>/<case>.json → exact commands in <case>.txt and
-verification commands in <case>.verify.txt.
+verification commands in <case>.verify.txt. A case with "expect_errors" ({field: text}) must instead be refused
+with a clear message at those fields (a feature the OS cannot do is never skipped silently).
 
 UPDATE_GOLDEN=1 pytest tests/drivers rewrites the expected files. A human must review the diff –
 that review is the point of these tests.
@@ -13,7 +14,7 @@ import pytest
 
 from app.drivers.base import ModelInfo, UnsupportedFeature
 from app.drivers.cisco_ios import CiscoIos
-from app.drivers.registry import CORE
+from app.drivers.registry import CORE, EXPERIMENTAL
 from app.models.plan import ConfigPlan
 from app.services import safety
 from app.services.catalog import effective_capabilities, load_file
@@ -36,7 +37,7 @@ REQUIRED_CASES = {"basic_hostname_domain", "ssh_v2", "hardening", "vlans_multi",
 def load_case(os_id: str, case: str):
     spec = json.loads((GOLDEN / os_id / f"{case}.json").read_text(encoding="utf-8"))
     model = MODELS[spec["model_id"]]
-    driver = CORE[os_id](ModelInfo.from_doc(model))
+    driver = {**CORE, **EXPERIMENTAL}[os_id](ModelInfo.from_doc(model))
     plan = normalize_interfaces(ConfigPlan.model_validate(spec["plan"]), driver.normalize_interface)
     return driver, model, plan
 
@@ -52,23 +53,37 @@ def compare(path: Path, lines: list[str]) -> None:
 def test_every_required_case_exists():
     for os_id in CORE:
         have = {case for o, case in CASES if o == os_id}
-        assert REQUIRED_CASES <= have, REQUIRED_CASES - have
+        assert REQUIRED_CASES <= have, (os_id, REQUIRED_CASES - have)
+
+
+def plan_errors(os_id: str, case: str) -> dict[str, str]:
+    driver, model, plan = load_case(os_id, case)
+    caps = set(effective_capabilities(DRIVERS[os_id], model)) & set(driver.capabilities)
+    result = validate_plan(plan, model=driver.model, capabilities=caps, os_name=driver.os_name)
+    return {**result.errors, **{u["feature"]: u["message"] for u in result.unsupported}, **driver.review(plan)[0]}
 
 
 @pytest.mark.parametrize(("os_id", "case"), CASES)
 def test_golden_commands(os_id, case):
+    spec = json.loads((GOLDEN / os_id / f"{case}.json").read_text(encoding="utf-8"))
+    errors = plan_errors(os_id, case)
+    if "expect_errors" in spec:
+        for path, text in spec["expect_errors"].items():
+            found = errors.get(path) or next((m for k, m in errors.items() if path.endswith(k)), None)
+            assert found and text.lower() in found.lower(), (path, errors)
+        return
+    assert not errors, errors  # every golden plan must be valid for its model and OS
     driver, model, plan = load_case(os_id, case)
-    caps = set(effective_capabilities(DRIVERS[os_id], model))
-    result = validate_plan(plan, model=driver.model, capabilities=caps, os_name=driver.os_name)
-    assert result.ok, result.errors  # every golden plan must be valid for its model
     commands = driver.generate(plan, "preview")
-    assert safety.check_denylist(commands) == []
+    assert safety.check_denylist(commands, driver.denylist()) == []
     compare(GOLDEN / os_id / f"{case}.txt", commands)
     compare(GOLDEN / os_id / f"{case}.verify.txt", driver.verify_commands(plan))
 
 
 @pytest.mark.parametrize(("os_id", "case"), CASES)
 def test_generated_lines_are_single_commands(os_id, case):
+    if "expect_errors" in json.loads((GOLDEN / os_id / f"{case}.json").read_text(encoding="utf-8")):
+        return
     driver, _, plan = load_case(os_id, case)
     for line in driver.generate(plan, "preview"):
         assert "\n" not in line and "\r" not in line
@@ -129,12 +144,12 @@ def test_portfast_edge_and_vty_flags():
     assert "line vty 0 4" in out and "line vty 5 15" in out
 
 
-def test_session_steps_use_archive_fs_flag():
+def test_session_uses_archive_fs_flag():
     driver = CiscoIos(ModelInfo.from_doc(MODELS["cisco-iosv"]))
-    steps = driver.session_steps(ConfigPlan.model_validate({"revert_minutes": 7}))
+    sess = driver.session(ConfigPlan.model_validate({"revert_minutes": 7}), "ncs-1")
     assert driver.rollback_setup("hostname r1\n!\nline vty 0 4\n") == ["archive", " path flash0:ncs-archive",
                                                                        " maximum 5"]
     assert driver.rollback_setup("hostname r1\narchive\n path flash0:x\n maximum 5\n!\n") == []
-    assert steps["begin"] == ["configure terminal revert timer 7"]
-    assert steps["confirm"] == ["configure confirm"] and steps["revert"] == ["configure revert now"]
+    assert sess.begin == "configure terminal revert timer 7" and sess.applies_immediately and sess.timer
+    assert sess.confirm == ("configure confirm",) and sess.revert == ("configure revert now",)
     assert driver.save_command() == "write memory" and driver.rollback_strategy() == "revert_timer"

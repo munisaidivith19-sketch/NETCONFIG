@@ -8,7 +8,7 @@ import re
 
 from ..models.plan import ConfigPlan
 from ..security.masking import MASK
-from .base import Check, Kind, ModelInfo, UnsupportedFeature, expand_vlan_list, vlan_list
+from .base import Check, Kind, ModelInfo, Session, UnsupportedFeature, expand_vlan_list, vlan_list
 
 ALL_CAPABILITIES = {"vlans", "access", "trunk", "svi", "routed_if", "dhcp", "nat", "static", "ospf", "eigrp",
                     "bgp", "ssh", "default_gateway"}
@@ -59,6 +59,8 @@ class CiscoIos:
     os_name = "Cisco IOS / IOS-XE"
     netmiko_device_type = "cisco_ios"
     capabilities = ALL_CAPABILITIES
+    cli_syntax = "ios"
+    config_prompt = r"\(config[^)]*\)#"
 
     def __init__(self, model: ModelInfo):
         self.model = model
@@ -469,6 +471,16 @@ class CiscoIos:
                                             "established" if state.isdigit() else state, required=False))
         return checks
 
+    def review(self, plan: ConfigPlan) -> tuple[dict[str, str], list[str]]:
+        # Every plan option has a Cisco command. IOS generates the SSH RSA keys from hostname + domain name.
+        if plan.ssh and not (plan.basic and plan.basic.domain):
+            return {"basic.domain" if plan.basic else "basic": "SSH needs a hostname and a domain name (for its "
+                                                                "RSA keys)"}, []
+        return {}, []
+
+    def denylist(self) -> list[tuple[tuple[str, ...], str]]:
+        return []
+
     # --------------------------------------------------------- push support
     def error_patterns(self) -> list[str]:
         return list(ERROR_PATTERNS)
@@ -482,14 +494,10 @@ class CiscoIos:
     def rollback_strategy(self) -> str:
         return "revert_timer"
 
-    def session_steps(self, plan: ConfigPlan) -> dict[str, list[str]]:
+    def session(self, plan: ConfigPlan, name: str) -> Session:
         """Commands around the change window (docs/drivers/cisco_ios.md section 1)."""
-        return {
-            "configure": ["configure terminal"],  # a plain session, for rollback_setup()
-            "begin": [f"configure terminal revert timer {plan.revert_minutes}"],
-            "confirm": ["configure confirm"],
-            "revert": ["configure revert now"],
-        }
+        return Session(strategy="revert_timer", begin=f"configure terminal revert timer {plan.revert_minutes}",
+                       confirm=("configure confirm",), revert=("configure revert now",))
 
     def management_interface(self, outputs: dict[str, str], mgmt_ip: str) -> str | None:
         rows = parse_ip_interface_brief(outputs.get("show ip interface brief", ""), self.normalize_interface)
@@ -528,6 +536,28 @@ class CiscoIos:
                for head, body in sections):
             return []
         return ["archive", f" path {self.flags.get('archive_fs', 'flash:')}{ARCHIVE_DIR}", " maximum 5"]
+
+    # ------------------------------------------------------------ discovery
+    def facts_commands(self) -> list[str]:
+        return ["show version"]
+
+    def parse_facts(self, outputs: dict[str, str]) -> dict:
+        return parse_show_version(outputs.get("show version", ""))
+
+    def neighbor_commands(self) -> list[str]:
+        return ["show cdp neighbors detail", "show lldp neighbors detail"]
+
+    def parse_neighbors(self, outputs: dict[str, str]) -> list[dict]:
+        found = parse_cdp_detail(outputs.get("show cdp neighbors detail", ""))
+        found += parse_lldp_detail(outputs.get("show lldp neighbors detail", ""))
+        seen, out = set(), []
+        for n in found:
+            n["local"] = self.normalize_interface(n["local"])
+            key = (n["local"], n["remote"].split(".")[0].lower())
+            if key not in seen:
+                seen.add(key)
+                out.append(n)
+        return out
 
 
 # ----------------------------------------------------------------- parsers
@@ -609,3 +639,45 @@ def _area_equal(shown: str, area: int) -> bool:
 
 def _first_line(text: str) -> str:
     return text.strip().splitlines()[0] if text.strip() else ""
+
+
+def parse_show_version(text: str) -> dict:
+    """Model, software version, serial and hostname from IOS / IOS-XE "show version"."""
+    def find(pattern: str) -> str | None:
+        m = re.search(pattern, text, re.M)
+        return m.group(1).strip() if m else None
+
+    return {
+        "version": find(r"(?:Cisco IOS.*?|IOS-XE.*?), Version ([^\s,]+)"),
+        "model": find(r"^Model [Nn]umber\s*:\s*(\S+)") or find(r"^[Cc]isco (\S+) \(.+\) processor"),
+        "serial": find(r"^System [Ss]erial [Nn]umber\s*:\s*(\S+)") or find(r"^Processor board ID (\S+)"),
+        "hostname": find(r"^(\S+) uptime is"),
+    }
+
+
+def parse_cdp_detail(text: str) -> list[dict]:
+    """'show cdp neighbors detail': blocks separated by dashes, each with Device ID, Interface and Port ID."""
+    out = []
+    for block in re.split(r"^-{5,}\s*$", text, flags=re.M):
+        dev = re.search(r"^Device ID:\s*(\S+)", block, re.M)
+        ports = re.search(r"^Interface:\s*([^,]+),\s*Port ID \(outgoing port\):\s*(\S+)", block, re.M)
+        if dev and ports:
+            ip = re.search(r"IP(?:v4)? [Aa]ddress:\s*(\d+\.\d+\.\d+\.\d+)", block)
+            out.append({"local": ports.group(1).strip(), "remote": dev.group(1), "port": ports.group(2),
+                        "ip": ip.group(1) if ip else None, "protocol": "cdp"})
+    return out
+
+
+def parse_lldp_detail(text: str) -> list[dict]:
+    """'show lldp neighbors detail' (IOS): Local Intf, Port id and System Name per block."""
+    out = []
+    for block in re.split(r"^-{5,}\s*$", text, flags=re.M):
+        local = re.search(r"^Local Intf:\s*(\S+)", block, re.M)
+        name = re.search(r"^System Name:\s*(\S+)", block, re.M)
+        port = re.search(r"^Port id:\s*(\S+)", block, re.M)
+        if local and (name or port):
+            ip = re.search(r"IP(?:v4)?:\s*(\d+\.\d+\.\d+\.\d+)", block)
+            out.append({"local": local.group(1), "remote": name.group(1) if name else "unknown",
+                        "port": port.group(1) if port else "", "ip": ip.group(1) if ip else None,
+                        "protocol": "lldp"})
+    return out

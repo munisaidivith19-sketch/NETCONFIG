@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pymongo.database import Database
 
 from ..config import Settings
-from ..drivers.base import Driver, ModelInfo
+from ..drivers.base import Driver, ModelInfo, UnsupportedFeature
 from ..drivers.registry import get_driver
 from ..errors import ApiError
 from ..models.common import oid
@@ -98,16 +98,23 @@ def prepare(db: Database, settings: Settings, plan: ConfigPlan, *, device_id: st
     p.warnings += result.warnings
     p.unsupported = result.unsupported
 
+    option_errors, notes = driver.review(plan)  # plan options this OS does differently or cannot do
+    for path, message in option_errors.items():
+        p.errors.setdefault(path, message)
+    p.warnings += notes
     if plan.custom_commands and p.production:
         p.errors.setdefault("custom_commands", PRODUCTION_CUSTOM)
     if p.errors:
         return p
 
-    commands = driver.generate(plan, "preview")
+    try:
+        commands = driver.generate(plan, "preview")
+    except UnsupportedFeature as exc:  # a safety net: option_errors() should have named the field already
+        p.errors["plan"] = str(exc)
+        return p
     via_ssh = bool(device and device.get("connection", {}).get("method") == "ssh")
-    violations = safety.check_denylist(commands) + safety.check_management(
-        commands, mgmt_interface=None, mgmt_ip=(device or {}).get("mgmt_ip"), via_ssh=via_ssh,
-        normalize_interface=driver.normalize_interface)
+    violations = safety.check_denylist(commands, driver.denylist()) + safety.management_violations(
+        driver, commands, mgmt_interface=None, mgmt_ip=(device or {}).get("mgmt_ip"), via_ssh=via_ssh)
     custom_start = len(commands) - len(plan.custom_commands)
     for v in violations:
         path = f"custom_commands.{v.index - custom_start}" if v.index >= custom_start else "commands"

@@ -1,0 +1,14 @@
+vlan 20
+   name Engineering
+interface Ethernet1
+   description Eng desks
+   switchport mode access
+   switchport access vlan 20
+   spanning-tree portfast
+   no shutdown
+interface Ethernet2
+   description Eng desks
+   switchport mode access
+   switchport access vlan 20
+   spanning-tree portfast
+   no shutdown

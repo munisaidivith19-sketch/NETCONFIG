@@ -1,0 +1,12 @@
+{
+  "model_id": "huawei-s5735-l24t4s-a",
+  "plan": {
+    "hardening": {
+      "banner": "Authorised access only"
+    }
+  },
+  "expect_errors": {
+    "hardening.login_block": "not supported",
+    "hardening.banner": "not supported"
+  }
+}

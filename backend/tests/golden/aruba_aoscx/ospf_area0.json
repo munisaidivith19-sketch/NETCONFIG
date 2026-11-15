@@ -1,0 +1,42 @@
+{
+  "model_id": "aruba-cx-simulator",
+  "plan": {
+    "interfaces": [
+      {
+        "interface": "1/1/1",
+        "ip": "10.255.0.2/30"
+      },
+      {
+        "interface": "1/1/2",
+        "ip": "10.0.40.1/24"
+      },
+      {
+        "interface": "Loopback0",
+        "ip": "10.255.255.2/32"
+      }
+    ],
+    "routing": {
+      "ospf": {
+        "process_id": 1,
+        "router_id": "10.255.255.2",
+        "interfaces": [
+          {
+            "interface": "1/1/1",
+            "area": 0
+          },
+          {
+            "interface": "1/1/2",
+            "area": 0
+          },
+          {
+            "interface": "Loopback0",
+            "area": 0
+          }
+        ],
+        "passive_interfaces": [
+          "1/1/2"
+        ]
+      }
+    }
+  }
+}

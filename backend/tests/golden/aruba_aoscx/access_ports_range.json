@@ -1,0 +1,23 @@
+{
+  "model_id": "aruba-cx-simulator",
+  "plan": {
+    "vlans": [
+      {
+        "id": 10,
+        "name": "Sales"
+      }
+    ],
+    "access": [
+      {
+        "interfaces": [
+          "1/1/1",
+          "1/1/2",
+          "1/1/3"
+        ],
+        "vlan": 10,
+        "description": "Sales desks",
+        "portfast": false
+      }
+    ]
+  }
+}

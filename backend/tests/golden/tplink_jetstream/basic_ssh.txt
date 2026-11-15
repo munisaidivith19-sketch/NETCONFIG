@@ -1,0 +1,4 @@
+hostname access-sw1
+user name netadmin privilege admin secret 0 ********
+ip ssh server
+ip ssh version v2

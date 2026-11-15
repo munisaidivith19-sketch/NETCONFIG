@@ -215,7 +215,7 @@ class SimulatedConnection:
         self.d.context = None
         return ""
 
-    def exec(self, command: str) -> str:
+    def exec(self, command: str, prompts=None) -> str:
         with self.d.lock:
             if command == "configure revert now":
                 self.d.revert()
@@ -240,6 +240,9 @@ class SimulatedConnector:
     def open(self, params: ConnectParams, who=None, notes: list[str] | None = None):
         if notes is not None:
             notes.append("SIMULATION: this push went to an in-memory simulated device, not the network.")
+        if params.device_type != "cisco_ios":
+            raise ConnectFailed("error", "The simulator only imitates Cisco IOS; test other OSes in the lab "
+                                         "(docs/LAB_TESTING.md).")
         if params.password is not None and params.password.get_secret_value() == "wrong":
             raise ConnectFailed("auth", "Login failed: check the username and password (not retried).")
         if params.method == "ssh":

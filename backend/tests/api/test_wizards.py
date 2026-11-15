@@ -46,10 +46,10 @@ class MixedConnector:
         errors, sent = self.exec_errors.get(params.host, {}), self.sent.setdefault(params.host, [])
         real_exec = conn.exec
 
-        def exec_(command):
+        def exec_(command, prompts=None):
             sent.append(command)
             self.order.append((params.host, command))
-            return errors[command] if command in errors else real_exec(command)
+            return errors[command] if command in errors else real_exec(command, prompts)
 
         conn.exec = exec_
         return conn

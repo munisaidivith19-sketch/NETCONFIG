@@ -1,0 +1,10 @@
+{
+  "model_id": "arista-ceos-lab",
+  "plan": {
+    "hardening": {
+      "password_encryption": true,
+      "disable_http": false,
+      "login_block": null
+    }
+  }
+}

@@ -8,10 +8,15 @@ MASK = "********"
 _PATTERNS = [
     # Cisco / Arista / Aruba: password|secret [0|5|7|8|9|sha512|ciphertext|plaintext] value
     re.compile(
-        r"(?P<keep>\b(?:password|secret)\s+(?:(?:0|5|6|7|8|9|sha512|sha256|ciphertext|plaintext)\s+)?)(?P<val>\S+)",
+        r"(?P<keep>\b(?:password|secret)\s+"
+        r"(?:(?:0|5|6|7|8|9|sha512|sha256|ciphertext|plaintext|irreversible-cipher|cipher|simple)\s+)?)"
+        r"(?P<val>\S+)",
         re.IGNORECASE,
     ),
     re.compile(r"(?P<keep>\bcommunity\s+)(?P<val>\S+)", re.IGNORECASE),
+    # MikroTik RouterOS "/user add ... password=X"; D-Link "config account U encrypt plain_text|sha_1 X"
+    re.compile(r"(?P<keep>\bpassword=)(?P<val>\"[^\"]*\"|\S+)", re.IGNORECASE),
+    re.compile(r"(?P<keep>\bencrypt\s+(?:plain_text|sha_1)\s+)(?P<val>\S+)", re.IGNORECASE),
     re.compile(r"(?P<keep>\bkey-string\s+(?:\d\s+)?)(?P<val>\S+)", re.IGNORECASE),
     # "... key 0|6|7 X"; not "message-digest-key 7 md5 X" (handled below, the 7 there is a key id)
     re.compile(r"(?P<keep>(?<!-)\bkey\s+(?:0|6|7)\s+)(?P<val>\S+)", re.IGNORECASE),

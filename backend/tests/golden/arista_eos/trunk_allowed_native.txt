@@ -1,0 +1,12 @@
+vlan 10
+   name Sales
+vlan 20
+   name Engineering
+vlan 99
+   name Native
+interface Ethernet1
+   description Uplink to core
+   switchport mode trunk
+   switchport trunk native vlan 99
+   switchport trunk allowed vlan 10,20,30-33,99
+   no shutdown

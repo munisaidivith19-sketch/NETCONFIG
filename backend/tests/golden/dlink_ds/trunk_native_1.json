@@ -1,0 +1,28 @@
+{
+  "model_id": "dlink-dgs-1210-28",
+  "plan": {
+    "vlans": [
+      {
+        "id": 10,
+        "name": "Sales"
+      },
+      {
+        "id": 20,
+        "name": "Engineering"
+      }
+    ],
+    "trunks": [
+      {
+        "interface": "25",
+        "allowed_vlans": [
+          10,
+          20
+        ],
+        "native_vlan": 1
+      }
+    ]
+  },
+  "expect_errors": {
+    "trunks.0.allowed_vlans": "VLAN 1"
+  }
+}

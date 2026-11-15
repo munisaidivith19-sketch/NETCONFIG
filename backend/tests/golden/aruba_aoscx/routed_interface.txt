@@ -1,0 +1,7 @@
+interface 1/1/1
+    description P2P to R1
+    no shutdown
+    routing
+    ip address 10.255.0.1/30
+interface loopback 0
+    ip address 10.255.255.1/32

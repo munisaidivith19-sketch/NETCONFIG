@@ -1,0 +1,6 @@
+hostname core1
+ip dns domain-name lab.example.net
+user netadmin group administrators password plaintext ********
+ssh server vrf default
+cli-session
+    timeout 15

@@ -1,0 +1,10 @@
+set vlans Sales vlan-id 10
+set vlans Engineering vlan-id 20
+set vlans Native vlan-id 99
+set interfaces ge-0/0/0 description "Uplink to core"
+set interfaces ge-0/0/0 unit 0 family ethernet-switching interface-mode trunk
+set interfaces ge-0/0/0 unit 0 family ethernet-switching vlan members 10
+set interfaces ge-0/0/0 unit 0 family ethernet-switching vlan members 20
+set interfaces ge-0/0/0 unit 0 family ethernet-switching vlan members 30-33
+set interfaces ge-0/0/0 unit 0 family ethernet-switching vlan members 99
+set interfaces ge-0/0/0 native-vlan-id 99

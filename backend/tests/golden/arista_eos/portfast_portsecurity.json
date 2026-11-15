@@ -1,0 +1,30 @@
+{
+  "model_id": "arista-ceos-lab",
+  "plan": {
+    "vlans": [
+      {
+        "id": 20,
+        "name": "Engineering"
+      }
+    ],
+    "access": [
+      {
+        "interfaces": [
+          "Ethernet1",
+          "Ethernet2"
+        ],
+        "vlan": 20,
+        "description": "Eng desks",
+        "portfast": true,
+        "port_security": {
+          "maximum": 2,
+          "violation": "restrict",
+          "sticky": true
+        }
+      }
+    ]
+  },
+  "expect_errors": {
+    "access.0.port_security": "port security"
+  }
+}

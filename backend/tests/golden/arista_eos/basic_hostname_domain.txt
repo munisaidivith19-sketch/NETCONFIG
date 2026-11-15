@@ -1,0 +1,2 @@
+hostname R1-Branch
+dns domain lab.example.net

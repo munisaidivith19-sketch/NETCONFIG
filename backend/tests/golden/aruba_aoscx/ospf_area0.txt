@@ -1,0 +1,20 @@
+interface 1/1/1
+    no shutdown
+    routing
+    ip address 10.255.0.2/30
+interface 1/1/2
+    no shutdown
+    routing
+    ip address 10.0.40.1/24
+interface loopback 0
+    ip address 10.255.255.2/32
+router ospf 1
+    router-id 10.255.255.2
+    area 0.0.0.0
+interface 1/1/1
+    ip ospf 1 area 0.0.0.0
+interface 1/1/2
+    ip ospf 1 area 0.0.0.0
+    ip ospf passive
+interface loopback 0
+    ip ospf 1 area 0.0.0.0

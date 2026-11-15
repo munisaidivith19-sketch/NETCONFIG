@@ -4,7 +4,7 @@ import ipaddress
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, StringConstraints, field_validator, model_validator
+from pydantic import BaseModel, Field, SecretStr, StringConstraints, field_validator, model_validator
 
 from .common import StrictModel
 
@@ -51,6 +51,14 @@ class Connection(StrictModel):
         return self
 
 
+class Uplink(StrictModel):
+    """The switch port an access point or camera is plugged into. Configuring that port is how NetConfig Studio
+    serves a controller-managed AP (the AP itself is configured by its controller)."""
+
+    device_id: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{24}$")]
+    interface: Annotated[str, StringConstraints(min_length=1, max_length=48, pattern=r"^[A-Za-z0-9][A-Za-z0-9/.:-]*$")]
+
+
 class DeviceCreate(StrictModel):
     name: DeviceName
     model_id: ModelId
@@ -58,6 +66,7 @@ class DeviceCreate(StrictModel):
     connection: Connection = Field(default_factory=Connection)
     location: Location = ""
     tags: list[Tag] = Field(default_factory=list, max_length=10)
+    uplink: Uplink | None = None
 
     @field_validator("mgmt_ip")
     @classmethod
@@ -94,6 +103,7 @@ class DeviceUpdate(StrictModel):
     connection: Connection | None = None
     location: Location | None = None
     tags: list[Tag] | None = Field(default=None, max_length=10)
+    uplink: Uplink | None = None
 
 
 class DeviceOut(BaseModel):
@@ -113,5 +123,15 @@ class DeviceOut(BaseModel):
     tags: list[str]
     production: bool
     status: dict
+    uplink: dict | None = None
+    facts: dict | None = None  # read-only information read from the device (ONVIF, show version)
     created_at: datetime | None
     updated_at: datetime | None
+
+
+class OnvifRequest(StrictModel):
+    """Camera login for one ONVIF read. Never stored (CLAUDE.md 8.3)."""
+
+    username: Annotated[str, StringConstraints(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._@-]+$")]
+    password: Annotated[SecretStr, Field(min_length=1, max_length=128)]
+    port: int = Field(default=80, ge=1, le=65535)

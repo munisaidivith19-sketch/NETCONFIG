@@ -1,0 +1,25 @@
+{
+  "model_id": "mikrotik-crs326-24g-2s",
+  "plan": {
+    "vlans": [
+      {
+        "id": 10,
+        "name": "Sales"
+      }
+    ],
+    "access": [
+      {
+        "interfaces": [
+          "ether2"
+        ],
+        "vlan": 10,
+        "port_security": {
+          "maximum": 2
+        }
+      }
+    ]
+  },
+  "expect_errors": {
+    "access.0.port_security": "not supported"
+  }
+}

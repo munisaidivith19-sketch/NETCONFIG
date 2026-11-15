@@ -43,6 +43,8 @@ class Violation:
 
 def words_of(command: str) -> list[str]:
     words = command.strip().lower().split()
+    if words and words[0].startswith("/"):  # RouterOS menu paths: "/system/reboot" = "/system reboot"
+        words = [part for part in words[0].split("/") if part] + words[1:]
     while words and words[0] == "do":
         words = words[1:]
     return words
@@ -60,12 +62,12 @@ def _matches(words: list[str], keywords: tuple[str, ...]) -> bool:
     return len(words) >= len(keywords) and all(_abbr(w, k) for w, k in zip(words, keywords, strict=False))
 
 
-def denied(command: str) -> str | None:
-    """The denylist rule a single command breaks, or None."""
+def denied(command: str, extra: Iterable[tuple[tuple[str, ...], str]] = ()) -> str | None:
+    """The denylist rule a single command breaks, or None. ``extra``: the driver's own rules (Driver.denylist())."""
     words = words_of(command)
     if not words:
         return None
-    for keywords, label in DENYLIST:
+    for keywords, label in [*DENYLIST, *extra]:
         if _matches(words, keywords):
             return f"'{label}' is never sent by NetConfig Studio"
     if _abbr(words[0], "copy"):
@@ -77,11 +79,12 @@ def denied(command: str) -> str | None:
     return None
 
 
-def check_denylist(commands: Iterable[str]) -> list[Violation]:
+def check_denylist(commands: Iterable[str], extra: Iterable[tuple[tuple[str, ...], str]] = ()) -> list[Violation]:
+    extra = list(extra)
     out = []
     for i, line in enumerate(commands):
         for part in split_commands(line):
-            rule = denied(part)
+            rule = denied(part, extra)
             if rule:
                 out.append(Violation(i, line, rule))
                 break
@@ -144,7 +147,7 @@ def check_management(
             w = words_of(part)
             if not w:
                 continue
-            if w[0] in ("exit", "end"):
+            if w[0] in ("exit", "end", "quit", "return"):  # "quit"/"return": Huawei VRP
                 context = None
                 continue
             if len(w) >= 2 and len(w[0]) >= 2 and _abbr(w[0], "interface"):
@@ -153,14 +156,17 @@ def check_management(
                 else:
                     context = ("interface", normalize_interface("".join(w[1:])).lower())
                 continue
-            if len(w) >= 2 and _abbr(w[0], "line") and _abbr(w[1], "vty"):
+            if len(w) >= 2 and (_abbr(w[0], "line") or w[0] == "user-interface") and _abbr(w[1], "vty"):
                 context = ("vty", "")
                 continue
+            if len(w) >= 2 and w[0] == "management" and _abbr(w[1], "ssh"):  # Arista EOS
+                context = ("mgmt-ssh", "")
+                continue
             sub_mode = w[0] == "ip" and len(w) > 1 and w[1] in ("dhcp", "access-list")
-            if w[0] in ("router", "vlan", "archive") or sub_mode:
+            if w[0] in ("router", "vlan", "archive", "dhcp-server") or sub_mode:
                 context = ("other", "")
 
-            negated = w[0] == "no"
+            negated = w[0] in ("no", "undo")  # "undo": Huawei VRP
             body = w[1:] if negated else w
 
             # Global rules
@@ -173,6 +179,13 @@ def check_management(
                 flag(i, line, "removes the VTY lines used by SSH")
             if via_ssh and negated and len(body) >= 2 and body[0] == "ip" and body[1] == "ssh":
                 flag(i, line, "changes SSH while connected over SSH")
+            if via_ssh and negated and len(body) >= 2 and body[0] == "ssh" and body[1] == "server":  # AOS-CX
+                flag(i, line, "turns off the SSH server while connected over SSH")
+            if via_ssh and w[0] == "undo" and body[:1] in (["stelnet"], ["ssh"]):  # Huawei VRP
+                flag(i, line, "changes SSH while connected over SSH")
+            if via_ssh and context and context[0] == "mgmt-ssh" and not negated and len(w[0]) >= 2 \
+                    and _abbr(w[0], "shutdown"):
+                flag(i, line, "turns off the SSH server while connected over SSH")
 
             if context and context[0] == "vty" and via_ssh:
                 transport = len(body) >= 2 and len(body[0]) >= 3 and _abbr(body[0], "transport") \
@@ -182,6 +195,8 @@ def check_management(
                         flag(i, line, "removes SSH access on the VTY lines while connected over SSH")
                 if negated and body and len(body[0]) >= 3 and _abbr(body[0], "login"):
                     flag(i, line, "removes the login method used by SSH")
+                if body[:2] == ["protocol", "inbound"] and (negated or not {"ssh", "all"} & set(body[2:])):
+                    flag(i, line, "removes SSH access on the VTY lines while connected over SSH")  # Huawei VRP
 
             if context and context[0] == "interface":
                 name = context[1]
@@ -195,7 +210,7 @@ def check_management(
                     if negated and len(body) >= 2 and body[0] == "ip" and _abbr(body[1], "address"):
                         flag(i, line, "removes the management IP address")
                     if not negated and len(body) >= 3 and body[0] == "ip" and _abbr(body[1], "address") \
-                            and mgmt_ip and body[2] != mgmt_ip:
+                            and mgmt_ip and body[2].split("/")[0] != mgmt_ip:
                         flag(i, line, "changes the management IP address")
                     vrf = body[:1] == ["vrf"] and len(body) >= 2 and _abbr(body[1], "forwarding")
                     ip_vrf = body[:2] == ["ip", "vrf"] and len(body) >= 3 and _abbr(body[2], "forwarding")
@@ -212,8 +227,138 @@ def check_management(
 
             # Assigning the management IP to another interface creates a duplicate address.
             if mgmt_ip and not negated and len(body) >= 3 and body[0] == "ip" and _abbr(body[1], "address") \
-                    and body[2] == mgmt_ip and context and context[0] == "interface" and mgmt and context[1] != mgmt:
+                    and body[2].split("/")[0] == mgmt_ip and context and context[0] == "interface" and mgmt \
+                    and context[1] != mgmt:
                 flag(i, line, "puts the management IP address on another interface")
     # One message per command line is enough.
     seen: set[int] = set()
     return [v for v in out if not (v.index in seen or seen.add(v.index))]
+
+
+def management_violations(driver, commands: list[str], *, mgmt_interface: str | None, mgmt_ip: str | None,
+                          via_ssh: bool) -> list[Violation]:
+    """Management protection in the syntax of the driver's OS."""
+    if driver.cli_syntax == "set":
+        return check_management_set(commands, mgmt_interface=mgmt_interface, mgmt_ip=mgmt_ip, via_ssh=via_ssh)
+    if driver.cli_syntax == "routeros":
+        return check_management_routeros(commands, mgmt_interface=mgmt_interface, mgmt_ip=mgmt_ip, via_ssh=via_ssh)
+    if driver.cli_syntax == "dlink":
+        return check_management_dlink(commands, mgmt_interface=mgmt_interface, via_ssh=via_ssh)
+    return check_management(commands, mgmt_interface=mgmt_interface, mgmt_ip=mgmt_ip, via_ssh=via_ssh,
+                            normalize_interface=driver.normalize_interface)
+
+
+def check_management_set(commands: Iterable[str], *, mgmt_interface: str | None, mgmt_ip: str | None,
+                         via_ssh: bool) -> list[Violation]:
+    """Junos "set" syntax. ``mgmt_interface`` is a logical interface such as "ge-0/0/0.0", "irb.10" or "em0.0".
+
+    Blocked: disabling or deactivating the management port or unit, turning the management port into a switch
+    port, putting it into an interface range (a range applies its settings to every member), another address on
+    the management unit, the management address on another interface, deactivating system settings, and changing
+    SSH while connected over SSH. "delete" is on the global denylist, so nothing can be removed."""
+    phys, _, unit = (mgmt_interface or "").lower().partition(".")
+    unit = unit or "0"
+    out: list[Violation] = []
+
+    def address_in(rest: list[str]) -> str | None:
+        if "address" in rest and rest.index("address") + 1 < len(rest):
+            return rest[rest.index("address") + 1].split("/")[0]
+        return None
+
+    def rule_for(w: list[str]) -> str | None:
+        if len(w) < 2 or w[0] not in ("set", "deactivate"):
+            return None
+        if w[0] == "deactivate" and w[1] == "system":
+            return "deactivates system settings (SSH, users) while connected"
+        if via_ssh and w[1:4] == ["system", "services", "ssh"] and w[0] == "deactivate":
+            return "changes SSH while connected over SSH"
+        if w[1] != "interfaces" or len(w) < 3:
+            return None
+        name, rest = w[2], w[3:]
+        this_unit = rest[1] if rest[:1] == ["unit"] and len(rest) > 1 else None
+        addr = address_in(rest)
+        if phys and name == "interface-range" and phys in rest:
+            return "puts the management port into an interface range"
+        if phys and name == phys:
+            if w[0] == "deactivate" or ("disable" in rest and this_unit in (None, unit)):
+                return "disables the management interface"
+            if "ethernet-switching" in rest:
+                return "turns the management port into a switch port"
+            if addr and this_unit == unit and mgmt_ip and addr != mgmt_ip:
+                return "adds another address to the management interface"
+        if mgmt_ip and addr == mgmt_ip and f"{name}.{this_unit}" != f"{phys}.{unit}":
+            return "puts the management IP address on another interface"
+        return None
+
+    for i, line in enumerate(commands):
+        for part in split_commands(line):
+            rule = rule_for(words_of(part))
+            if rule:
+                out.append(Violation(i, line, rule))
+                break
+    return out
+
+
+def _violations(commands: Iterable[str], rule_for: Callable[[list[str]], str | None]) -> list[Violation]:
+    out = []
+    for i, line in enumerate(commands):
+        for part in split_commands(line):
+            rule = rule_for(words_of(part))
+            if rule:
+                out.append(Violation(i, line, rule))
+                break
+    return out
+
+
+def check_management_routeros(commands: Iterable[str], *, mgmt_interface: str | None, mgmt_ip: str | None,
+                              via_ssh: bool) -> list[Violation]:
+    """MikroTik RouterOS (experimental). ``mgmt_interface`` is the interface that holds the management address
+    ("bridge", "ether1"). Blocked: "remove"/"unset" anywhere (RouterOS deletes with them), disabling the
+    management interface or changing its VLAN settings, changing IP addresses or reusing the management
+    address, and turning off or moving the SSH service while connected over SSH."""
+    mgmt = (mgmt_interface or "").lower()
+
+    def rule_for(w: list[str]) -> str | None:
+        tokens = {t.strip("[]") for t in w}
+        if {"remove", "unset"} & tokens:
+            return "removes configuration ('remove' and 'unset' are never sent to RouterOS)"
+        names = {t.split("=", 1)[1] for t in tokens if t.startswith(("interface=", "name="))}
+        on_mgmt = bool(mgmt) and (mgmt in names or (w[:2] == ["interface", "disable"] and mgmt in tokens))
+        if on_mgmt and ("disable" in tokens or "disabled=yes" in tokens):
+            return "disables the management interface"
+        if on_mgmt and any(t.startswith(("pvid=", "frame-types=", "bridge=", "vlan-id=")) for t in tokens):
+            return "changes the VLAN settings of the management interface"
+        if w[:2] == ["ip", "address"]:
+            if mgmt_ip and any(t.startswith("address=") and t[8:].split("/")[0] == mgmt_ip for t in tokens):
+                return "puts the management IP address on another interface"
+            if on_mgmt or "set" in tokens or "disable" in tokens:
+                return "changes the IP addresses of the management interface"
+        if via_ssh and w[:2] == ["ip", "service"] and "ssh" in tokens and (
+                "disable" in tokens or any(t.startswith(("disabled=y", "port=", "address=")) for t in tokens)):
+            return "changes the SSH service while connected over SSH"
+        return None
+
+    return _violations(commands, rule_for)
+
+
+def check_management_dlink(commands: Iterable[str], *, mgmt_interface: str | None, via_ssh: bool) -> list[Violation]:
+    """D-Link DGS/DES CLI (experimental). ``mgmt_interface`` is "Vlan<N>", the VLAN of the System IP interface.
+    Blocked: any "config ipif" (the management address), turning SSH off while connected over SSH, disabling
+    ports (the port that carries the management traffic is not known) and removing ports from the management
+    VLAN."""
+    mgmt_vlan = _mgmt_vlan(mgmt_interface)
+
+    def rule_for(w: list[str]) -> str | None:
+        if w[:2] == ["config", "ipif"]:
+            return "changes the management IP interface"
+        if via_ssh and w[:2] == ["disable", "ssh"]:
+            return "turns off SSH while connected over SSH"
+        if w[:2] == ["config", "ports"] and "disable" in w:
+            return "disables switch ports (the management port is not known)"
+        if w[:2] == ["config", "vlan"] and "delete" in w and mgmt_vlan is not None:
+            vid = w[3] if w[2:3] == ["vlanid"] and len(w) > 3 else ("1" if w[2:3] == ["default"] else None)
+            if vid is not None and mgmt_vlan in _vlan_ids(vid):
+                return f"removes ports from management VLAN {mgmt_vlan}"
+        return None
+
+    return _violations(commands, rule_for)

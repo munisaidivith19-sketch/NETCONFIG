@@ -1,0 +1,30 @@
+vlan 10
+ name Sales
+ exit
+vlan 20
+ name Engineering
+ exit
+vlan 99
+ name Native
+ exit
+interface gigabitEthernet 1/0/2
+ switchport general allowed vlan 10 untagged
+ switchport pvid 10
+ no switchport general allowed vlan 1
+ exit
+interface gigabitEthernet 1/0/3
+ switchport general allowed vlan 10 untagged
+ switchport pvid 10
+ no switchport general allowed vlan 1
+ exit
+interface gigabitEthernet 1/0/4
+ switchport general allowed vlan 10 untagged
+ switchport pvid 10
+ no switchport general allowed vlan 1
+ exit
+interface gigabitEthernet 1/0/9
+ switchport general allowed vlan 10,20 tagged
+ switchport general allowed vlan 99 untagged
+ switchport pvid 99
+ no switchport general allowed vlan 1
+ exit

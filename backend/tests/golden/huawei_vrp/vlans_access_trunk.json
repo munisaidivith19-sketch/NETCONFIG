@@ -1,0 +1,43 @@
+{
+  "model_id": "huawei-s5735-l24t4s-a",
+  "plan": {
+    "vlans": [
+      {
+        "id": 10,
+        "name": "Sales"
+      },
+      {
+        "id": 20,
+        "name": "Engineering"
+      },
+      {
+        "id": 99,
+        "name": "Native"
+      }
+    ],
+    "access": [
+      {
+        "interfaces": [
+          "GigabitEthernet0/0/2",
+          "GigabitEthernet0/0/3",
+          "GigabitEthernet0/0/4"
+        ],
+        "vlan": 10,
+        "portfast": true,
+        "description": "Sales desks"
+      }
+    ],
+    "trunks": [
+      {
+        "interface": "XGigabitEthernet0/0/1",
+        "allowed_vlans": [
+          10,
+          20,
+          99
+        ],
+        "native_vlan": 99,
+        "description": "Uplink to core"
+      }
+    ]
+  }
+}

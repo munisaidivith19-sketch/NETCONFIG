@@ -1,0 +1,11 @@
+{
+  "model_id": "juniper-vjunos-switch",
+  "plan": {
+    "hardening": {
+      "password_encryption": true,
+      "disable_http": false,
+      "login_block": null,
+      "banner": "Authorised access only. Activity is logged."
+    }
+  }
+}

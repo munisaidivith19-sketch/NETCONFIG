@@ -12,7 +12,10 @@ const EMPTY = {
   location: '',
   tags: '',
   connection: { method: 'ssh', port: 22, serial_port: '', baud: 9600 },
+  uplink: { device_id: '', interface: '' },
 }
+// Access points and cameras record the switch port they are plugged into.
+const UPLINK_CATEGORIES = ['ap', 'camera']
 
 function toForm(device) {
   if (!device) return EMPTY
@@ -23,10 +26,11 @@ function toForm(device) {
     location: device.location || '',
     tags: device.tags.join(', '),
     connection: { ...EMPTY.connection, ...device.connection, serial_port: device.connection.serial_port || '' },
+    uplink: { ...EMPTY.uplink, ...(device.uplink || {}) },
   }
 }
 
-function toBody(form) {
+function toBody(form, category) {
   const c = form.connection
   const connection = { method: c.method }
   if (c.method === 'ssh' || c.method === 'telnet_lab') connection.port = Number(c.port) || undefined
@@ -41,6 +45,9 @@ function toBody(form) {
     location: form.location.trim(),
     tags: form.tags.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean),
     connection,
+    uplink: UPLINK_CATEGORIES.includes(category) && form.uplink.device_id
+      ? { device_id: form.uplink.device_id, interface: form.uplink.interface.trim() }
+      : null,
   }
 }
 
@@ -51,6 +58,7 @@ export default function DeviceForm({ device, onSubmit, onCancel, submitLabel = '
   const [category, setCategory] = useState('')
   const [models, setModels] = useState([])
   const [model, setModel] = useState(null)
+  const [switches, setSwitches] = useState([])
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
 
@@ -63,6 +71,15 @@ export default function DeviceForm({ device, onSubmit, onCancel, submitLabel = '
     get(`/catalog/models/${form.model_id}`).then(setModel).catch(() => setModel(null))
   }, [form.model_id])
 
+  const hasUplink = UPLINK_CATEGORIES.includes(model?.category)
+  useEffect(() => {
+    if (!hasUplink) return
+    Promise.all(['switch', 'l3switch'].map((c) => get('/devices', { query: { category: c, page_size: 200 } })))
+      .then((pages) => setSwitches(pages.flatMap((r) => r.items)))
+      .catch(setError)
+  }, [hasUplink])
+  const uplinkSwitch = switches.find((s) => s.id === form.uplink.device_id)
+
   const connections = model?.os_driver?.connections?.length ? model.os_driver.connections : ['none']
   useEffect(() => {
     if (model && !connections.includes(form.connection.method)) {
@@ -72,6 +89,7 @@ export default function DeviceForm({ device, onSubmit, onCancel, submitLabel = '
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
   const setConn = (k) => (e) => setForm((f) => ({ ...f, connection: { ...f.connection, [k]: e.target.value } }))
+  const setUplink = (k) => (e) => setForm((f) => ({ ...f, uplink: { ...f.uplink, [k]: e.target.value } }))
   const fields = error?.fields || {}
   const method = form.connection.method
   const tagList = form.tags.split(',').map((t) => t.trim().toLowerCase())
@@ -82,7 +100,7 @@ export default function DeviceForm({ device, onSubmit, onCancel, submitLabel = '
     setBusy(true)
     setError(null)
     try {
-      await onSubmit(toBody(form))
+      await onSubmit(toBody(form, model?.category))
     } catch (err) {
       setError(err)
     } finally {
@@ -146,6 +164,31 @@ export default function DeviceForm({ device, onSubmit, onCancel, submitLabel = '
             <Field label="Management IP (optional for now)" error={fields.mgmt_ip} hint="Set during first-time setup">
               {(p) => <input {...p} className="input mono" value={form.mgmt_ip} onChange={set('mgmt_ip')} maxLength={45} />}
             </Field>
+          </>
+        )}
+        {method === 'none' && (
+          <Field label="Management IP (optional)" error={fields.mgmt_ip}
+            hint={model?.category === 'camera' ? 'Needed to read the camera’s ONVIF information' : 'For the inventory only'}>
+            {(p) => <input {...p} className="input mono" value={form.mgmt_ip} onChange={set('mgmt_ip')} maxLength={45} inputMode="decimal" />}
+          </Field>
+        )}
+        {hasUplink && (
+          <>
+            <Field label="Uplink switch" error={fields['uplink.device_id'] || fields.uplink}
+              hint="The switch this device is plugged into (optional)">
+              {(p) => (
+                <select {...p} className="select" value={form.uplink.device_id} onChange={setUplink('device_id')}>
+                  <option value="">Not recorded</option>
+                  {switches.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.model_name})</option>)}
+                </select>
+              )}
+            </Field>
+            {form.uplink.device_id && (
+              <Field label="Switch port" error={fields['uplink.interface']}
+                hint={uplinkSwitch?.model_name ? `The full port name on ${uplinkSwitch.name}` : 'The full port name'}>
+                {(p) => <input {...p} className="input mono" value={form.uplink.interface} onChange={setUplink('interface')} maxLength={48} required />}
+              </Field>
+            )}
           </>
         )}
         <Field label="Location" error={fields.location} hint="Optional, e.g. Building A / Rack 2">

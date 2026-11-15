@@ -1,0 +1,23 @@
+{
+  "model_id": "arista-ceos-lab",
+  "plan": {
+    "vlans": [
+      {
+        "id": 10,
+        "name": "Sales"
+      }
+    ],
+    "access": [
+      {
+        "interfaces": [
+          "Ethernet1",
+          "Ethernet2",
+          "Ethernet3"
+        ],
+        "vlan": 10,
+        "description": "Sales desks",
+        "portfast": false
+      }
+    ]
+  }
+}

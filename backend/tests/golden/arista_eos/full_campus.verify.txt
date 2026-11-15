@@ -1,0 +1,5 @@
+show running-config
+show vlan
+show interfaces Ethernet4 switchport
+show ip interface brief
+show ip ospf neighbor

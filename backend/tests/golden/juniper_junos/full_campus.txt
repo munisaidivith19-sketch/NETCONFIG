@@ -1,0 +1,53 @@
+set system host-name campus-core1
+set system domain-name campus.example.net
+set system login message "Authorised access only"
+set system login user netadmin class super-user
+set system login user netadmin authentication encrypted-password ********
+set system services ssh protocol-version v2
+set vlans Staff vlan-id 10
+set vlans Guests vlan-id 20
+set vlans Mgmt vlan-id 99
+set interfaces ge-0/0/0 description Staff
+set interfaces ge-0/0/0 unit 0 family ethernet-switching interface-mode access
+set interfaces ge-0/0/0 unit 0 family ethernet-switching vlan members 10
+set protocols rstp interface ge-0/0/0 edge
+set interfaces ge-0/0/1 description Staff
+set interfaces ge-0/0/1 unit 0 family ethernet-switching interface-mode access
+set interfaces ge-0/0/1 unit 0 family ethernet-switching vlan members 10
+set protocols rstp interface ge-0/0/1 edge
+set interfaces ge-0/0/2 unit 0 family ethernet-switching interface-mode access
+set interfaces ge-0/0/2 unit 0 family ethernet-switching vlan members 20
+set protocols rstp interface ge-0/0/2 edge
+set interfaces ge-0/0/3 description "To distribution"
+set interfaces ge-0/0/3 unit 0 family ethernet-switching interface-mode trunk
+set interfaces ge-0/0/3 unit 0 family ethernet-switching vlan members 10
+set interfaces ge-0/0/3 unit 0 family ethernet-switching vlan members 20
+set interfaces ge-0/0/3 unit 0 family ethernet-switching vlan members 99
+set interfaces ge-0/0/3 native-vlan-id 99
+set interfaces irb unit 10 family inet address 10.10.10.1/24
+set vlans Staff l3-interface irb.10
+set interfaces irb unit 20 family inet address 10.10.20.1/24
+set vlans Guests l3-interface irb.20
+set interfaces irb unit 99 family inet address 10.10.99.1/24
+set vlans Mgmt l3-interface irb.99
+set interfaces ge-0/0/4 description "To WAN router"
+set interfaces ge-0/0/4 unit 0 family inet address 10.255.1.1/30
+set access address-assignment pool STAFF family inet network 10.10.10.0/24
+set access address-assignment pool STAFF family inet range R1 low 10.10.10.10
+set access address-assignment pool STAFF family inet range R1 high 10.10.10.254
+set access address-assignment pool STAFF family inet dhcp-attributes router 10.10.10.1
+set access address-assignment pool STAFF family inet dhcp-attributes name-server 10.10.99.10
+set access address-assignment pool STAFF family inet dhcp-attributes maximum-lease-time 86400
+set system services dhcp-local-server group STAFF interface irb.10
+set access address-assignment pool GUESTS family inet network 10.10.20.0/24
+set access address-assignment pool GUESTS family inet range R1 low 10.10.20.2
+set access address-assignment pool GUESTS family inet range R1 high 10.10.20.254
+set access address-assignment pool GUESTS family inet dhcp-attributes router 10.10.20.1
+set access address-assignment pool GUESTS family inet dhcp-attributes name-server 9.9.9.9
+set access address-assignment pool GUESTS family inet dhcp-attributes maximum-lease-time 86400
+set system services dhcp-local-server group GUESTS interface irb.20
+set routing-options static route 0.0.0.0/0 next-hop 10.255.1.2
+set routing-options router-id 10.10.99.1
+set protocols ospf area 0.0.0.0 interface ge-0/0/4.0
+set protocols ospf area 0.0.0.0 interface irb.99
+set protocols ospf area 0.0.0.0 interface irb.99 passive

@@ -1,0 +1,17 @@
+{
+  "model_id": "huawei-s5735-l24t4s-a",
+  "plan": {
+    "basic": {
+      "hostname": "access-sw1"
+    },
+    "hardening": {
+      "password_encryption": false,
+      "disable_http": false,
+      "login_block": null
+    },
+    "ssh": {
+      "username": "netadmin",
+      "vty_timeout_minutes": 15
+    }
+  }
+}

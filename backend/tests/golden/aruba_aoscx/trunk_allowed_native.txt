@@ -1,0 +1,12 @@
+vlan 10
+    name Sales
+vlan 20
+    name Engineering
+vlan 99
+    name Native
+interface 1/1/1
+    description Uplink to core
+    no shutdown
+    no routing
+    vlan trunk native 99
+    vlan trunk allowed 10,20,30-33,99

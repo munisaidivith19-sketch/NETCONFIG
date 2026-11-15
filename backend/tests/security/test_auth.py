@@ -33,6 +33,7 @@ EXPECTED_ROLES = {
     ("GET", "/api/devices/{device_id}"): "viewer",
     ("PATCH", "/api/devices/{device_id}"): "engineer",
     ("DELETE", "/api/devices/{device_id}"): "admin",
+    ("POST", "/api/devices/{device_id}/onvif"): "engineer",
     ("POST", "/api/plans/preview"): "engineer",
     ("POST", "/api/jobs"): "engineer",
     ("GET", "/api/jobs"): "viewer",

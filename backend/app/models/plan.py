@@ -25,7 +25,7 @@ BannerText = Annotated[str, StringConstraints(min_length=1, max_length=240, patt
 NoteText = Annotated[str, StringConstraints(max_length=200, pattern=SAFE_BANNER)]  # job notes, reasons, template text
 Name32 = Annotated[str, StringConstraints(min_length=1, max_length=32, pattern=r"^[A-Za-z0-9_-]+$")]
 DeviceUser = Annotated[str, StringConstraints(min_length=1, max_length=32, pattern=r"^[A-Za-z0-9_.-]+$")]
-IfName = Annotated[str, StringConstraints(min_length=2, max_length=48, pattern=r"^[A-Za-z0-9][A-Za-z0-9/.:-]*$")]
+IfName = Annotated[str, StringConstraints(min_length=1, max_length=48, pattern=r"^[A-Za-z0-9][A-Za-z0-9/.:-]*$")]
 # [0-9], not \d: the regex engine treats \d as any Unicode digit (e.g. full-width digits).
 IPv4 = Annotated[str, StringConstraints(max_length=15, pattern=r"^[0-9]{1,3}(\.[0-9]{1,3}){3}$")]
 IPv4Cidr = Annotated[str, StringConstraints(max_length=18, pattern=r"^[0-9]{1,3}(\.[0-9]{1,3}){3}/[0-9]{1,2}$")]

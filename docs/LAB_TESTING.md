@@ -1,4 +1,9 @@
-# Lab testing – Cisco IOSv / IOSvL2 in GNS3 or CML-Free
+# Lab testing
+
+Part A covers Cisco IOSv / IOSvL2 (GNS3 or CML-Free). Part B (section 6 onward) covers the Phase 4
+drivers: Arista cEOS-lab, Juniper vJunos, the Aruba AOS-CX Simulator and MikroTik CHR.
+
+# Part A – Cisco IOSv / IOSvL2 in GNS3 or CML-Free
 
 The automated tests prove the **app** (validation, safety rules, push flow, rollback logic) with a fake
 device. They cannot prove that the **commands** are right for a real IOS image. This checklist does that.
@@ -139,3 +144,120 @@ engineer cannot approve; a second admin approves; the engineer runs it. Expected
 
 When every row passes, set `support: "tested"` for `cisco_ios` in `backend/app/data/catalog.json`, run
 `scripts/seed_catalog.py`, and record the change in the README progress table.
+
+---
+
+# Part B – Phase 4 drivers (Arista, Juniper, Aruba, MikroTik)
+
+Every Phase 4 driver is `experimental`. Its reference page (`docs/drivers/<os_id>.md`) marks each command
+that was not read verbatim in vendor documentation with **[LAB]**. This part of the checklist proves those
+items. A driver is promoted to `tested` only after **the author** confirms that every row of its results
+table passed. Claude Code must not change the support level on its own.
+
+## 6. Images and common setup (all free)
+
+| OS | Image | How to get it | Runs in |
+|---|---|---|---|
+| Arista EOS | **cEOS-lab** 4.3x (container) | free arista.com account → Software Downloads → cEOS-lab | GNS3 VM (Docker template) or containerlab in WSL2 |
+| Juniper Junos | **vJunos-switch** (EX ELS) and **vJunos-router**; for SRX NAT use the vSRX 3.0 evaluation | free download from juniper.net ("vJunos labs") | GNS3 VM (QEMU, 4 GB RAM, KVM needed) |
+| Aruba AOS-CX | **AOS-CX Simulator** 10.10+ (OVA) | free HPE Networking Support Portal account | GNS3 VM (QEMU) or VirtualBox |
+| MikroTik | **CHR** 7.x (raw disk image) | mikrotik.com/download; the free 1 Mbit/s licence is enough | GNS3 VM (QEMU) |
+
+NetConfig Studio itself still uses no Docker. The cEOS container runs only inside the GNS3 VM or WSL2.
+
+Topology (reuses the loopback adapter `10.0.0.100/24` from section 2):
+```
+laptop 10.0.0.100 ── Cloud ── mgmt switch (IOSvL2 or a GNS3 Ethernet switch, VLAN 1)
+                                 ├── ceos1    Management0      10.0.0.21/24
+                                 ├── vjunos1  fxp0 / em0       10.0.0.31/24   ge-0/0/0 ── ge-0/0/0 vjunos2 (10.0.0.32)
+                                 ├── cx1      mgmt (VRF mgmt)  10.0.0.41/24   1/1/1 ── 1/1/1 cx2 (10.0.0.42)
+                                 └── chr1     ether1           10.0.0.51/24
+```
+First-time setup is **not** automated for these OSes. Netmiko 4.8.0 has no serial driver for any of them and
+no telnet driver for AOS-CX (`docs/drivers/research/netmiko.md` Q1). On each node's console, set its
+management address and an admin user by hand. Then add it in **Devices → Add device** with connection **SSH**:
+
+| Name | Model | Management IP |
+|---|---|---|
+| ceos1 | Arista cEOS-lab | 10.0.0.21 |
+| vjunos1 / vjunos2 | Juniper vJunos-switch | 10.0.0.31 / .32 |
+| cx1 / cx2 | Aruba AOS-CX Simulator | 10.0.0.41 / .42 |
+| chr1 | MikroTik CHR (needs `ENABLE_EXPERIMENTAL_DRIVERS=true`) | 10.0.0.51 |
+
+Common items for **every** OS (record each one in that OS's results table):
+- **P1 Golden cases.** For each `backend/tests/golden/<os_id>/*.json` that has a `.txt` file, build the same
+  plan in the wizard and push it. The job must end `success`, and the device must show exactly the previewed
+  lines. Copy the real output of each verify command into `backend/tests/golden/<os_id>/outputs/`, so the
+  checks are tested against real text.
+- **P2 Refused features.** The preview must refuse each `.json` case that has **no** `.txt` (for example
+  `eigrp_named_or_classic`) with a clear "not supported" message.
+- **P3 CLI error.** A custom command with a typo (for example `interfase Ethernet1`) gives `rolled_back` (on
+  Junos: `failed` with nothing applied), and the error names that command. Write the exact error text in the
+  notes and compare it with the driver's `ERROR_PATTERNS`.
+- **P4 Unreachable after apply.** Suspend the node's management link while the job is *applying*. Expected:
+  the device's own timer restores the old configuration (check after the timer runs out).
+- **P5 Safety.** A plan that changes the management address is **blocked**. So is each OS-specific denylisted
+  custom command (see "Extra denylist" on each driver page).
+- **P6 Discovery (Phase 4B).** On the device panel, **Read device facts** with a device login fills in model,
+  version and serial, and the LLDP links appear on the Overview topology map.
+
+## 7. Arista cEOS-lab (`arista_eos`)
+
+| # | Check | Expected |
+|---|---|---|
+| A1 | Session flow: push `vlans_multi` and watch the transcript | `configure session nc-…` → commands → `commit timer 00:10:00` → verify → `configure session nc-… commit` → `copy running-config startup-config` |
+| A2 | During a push, run `show configuration sessions detail` on the console | the session is `pendingCommitTimer`; after the confirm it is `completed` |
+| A3 | Roll back now: force a failed verification | `configure session <name> abort` is accepted. If EOS refuses it, write down the reply; the timer must still restore the config |
+| A4 | What `end` does inside a session (type it by hand in a test session) | write down whether it commits, keeps the session pending, or prompts |
+| A5 | Every U line on `docs/drivers/arista_eos.md` (hostname, `dns domain`, switchport, SVI + `ip routing`, OSPF, BGP, `dhcp server ipv4` on the SVI) | accepted as typed, and shown the same way in `show running-config` |
+| A6 | NAT golden case | write down whether cEOS accepts `ip nat source dynamic … overload` (hardware dependent) |
+| A7 | Leave a session pending by hand (`max pending` = 1), then push | refused with a clear error; nothing applied |
+
+## 8. Juniper vJunos-switch / vJunos-router (`juniper_junos`)
+
+| # | Check | Expected |
+|---|---|---|
+| J1 | Commit flow: push `vlans_multi` | `configure private` → `set …` → `commit check` (`configuration check succeeds`) → `commit confirmed 10` → verify → `commit` (`commit complete`) |
+| J2 | A typo in a custom `set` command | refused **before** commit; `show system commit` has no new entry; job `failed` with "nothing was applied" |
+| J3 | Failed verification after `commit confirmed` | `rollback 1` + `commit` restore the old config; `show system commit` shows both commits |
+| J4 | Unreachable after `commit confirmed` (P4) | after 10 minutes Junos rolls back on its own (`show system commit` shows the rollback) |
+| J5 | Admin user from the `ssh_v2` case | the `$6$` hash from `shacrypt.py` lets `netadmin` log in with the plan's password |
+| J6 | `set system services ssh protocol-version v2` | accepted or refused on this release: write it down |
+| J7 | Trunk + native VLAN (`trunk_allowed_native`) | `show ethernet-switching interface` shows the members and the native VLAN |
+| J8 | IRB + DHCP (`dhcp_pool_excluded`) | a client in the VLAN gets an address; `show dhcp server binding` lists it |
+| J9 | NAT on vSRX (`nat_overload_acl`) | traffic from trust leaves with the interface address; on vJunos-switch the case is refused |
+| J10 | The exit prompt text in private mode | write down the exact wording (Netmiko answers "yes" to it; the engine never leaves before the commit) |
+
+## 9. Aruba AOS-CX Simulator (`aruba_aoscx`)
+
+| # | Check | Expected |
+|---|---|---|
+| X1 | Checkpoint flow: push `vlans_multi` | `checkpoint auto 10` (`Auto checkpoint mode expires in 10 minute(s)`) → `configure terminal` → commands → `end` → verify → `checkpoint auto confirm` (`checkpoint AUTO… created`) → `write memory` (`Success`) |
+| X2 | Failed verification | the job reports when the switch will restore the old config. After the timer: `Restoration successful` on the console, and the old config is back |
+| X3 | Unreachable after apply (P4) | same as X2: the switch restores the config on its own |
+| X4 | Default port mode on the Simulator | write down whether ports start routed; `no routing` before `vlan access` must be accepted either way |
+| X5 | Trunk order (`trunk_allowed_native`) | after `vlan trunk native 99` + `vlan trunk allowed 10,20,99`, `show interface 1/1/N` lists only those VLANs (not `all`) |
+| X6 | DHCP server (`dhcp_pool_excluded`) | the `default-router` and `lease` lines are accepted as generated; a client gets an address |
+| X7 | 6100 model rules | with the 6100 model chosen in the wizard, DHCP, OSPF, BGP and routed ports are refused |
+| X8 | `checkpoint rollback` while auto mode is active (by hand) | write down whether it is allowed (this decides whether a faster "roll back now" can be added) |
+
+## 10. MikroTik CHR (`mikrotik_routeros`, experimental)
+
+| # | Check | Expected |
+|---|---|---|
+| M1 | `vlans_access_trunk` on a bridge with ether2–ether4 | VLAN filtering is switched on **last**, and the SSH session survives |
+| M2 | `basic_ssh` | `/system identity`, the new user and `/ip ssh strong-crypto=yes` are set |
+| M3 | Failure | the job ends as **MANUAL ACTION** with the backup (`/export terse`) attached |
+
+## 11. Results – Part B
+
+| Date | OS / image | Items | Result | Notes (error texts, refused lines) |
+|---|---|---|---|---|
+| | cEOS-lab | P1–P6, A1–A7 | | |
+| | vJunos-switch | P1–P6, J1–J8, J10 | | |
+| | vSRX | J9 | | |
+| | AOS-CX Simulator | P1–P6, X1–X8 | | |
+| | MikroTik CHR | P1–P5, M1–M3 | | |
+
+When every row for an OS passes, tell Claude Code which rows passed. It then updates the golden outputs,
+removes the **[LAB]** marks from that driver page, and sets `support: "tested"` in `catalog.json`.

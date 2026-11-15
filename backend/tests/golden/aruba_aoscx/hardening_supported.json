@@ -1,0 +1,10 @@
+{
+  "model_id": "aruba-cx-simulator",
+  "plan": {
+    "hardening": {
+      "password_encryption": true,
+      "disable_http": false,
+      "login_block": null
+    }
+  }
+}

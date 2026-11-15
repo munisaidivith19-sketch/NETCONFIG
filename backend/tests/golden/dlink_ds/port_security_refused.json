@@ -1,0 +1,25 @@
+{
+  "model_id": "dlink-dgs-1210-28",
+  "plan": {
+    "vlans": [
+      {
+        "id": 10,
+        "name": "Sales"
+      }
+    ],
+    "access": [
+      {
+        "interfaces": [
+          "2"
+        ],
+        "vlan": 10,
+        "port_security": {
+          "maximum": 2
+        }
+      }
+    ]
+  },
+  "expect_errors": {
+    "access.0.port_security": "not supported"
+  }
+}

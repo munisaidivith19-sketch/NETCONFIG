@@ -1,5 +1,5 @@
 {
-  "_note": "SAMPLE DATA \u2013 unverified. Port counts and names are examples for testing; check the vendor datasheet before relying on them. Source of truth for commands is the OS driver, not this file.",
+  "_note": "SAMPLE DATA – unverified. Port counts and names are examples for testing; check the vendor datasheet before relying on them. Source of truth for commands is the OS driver, not this file.",
   "categories": [
     "switch",
     "l3switch",
@@ -44,16 +44,15 @@
       "_id": "arista_eos",
       "name": "Arista EOS",
       "vendor": "Arista",
-      "support": "planned",
+      "support": "experimental",
       "connections": [
         "ssh",
-        "serial",
         "telnet_lab"
       ],
-      "apply_mode": "immediate",
-      "save_command": "write memory",
+      "apply_mode": "commit",
+      "save_command": "copy running-config startup-config",
       "netmiko_device_type": "arista_eos",
-      "rollback": "backup_restore",
+      "rollback": "session_timer",
       "capabilities": [
         "vlans",
         "access",
@@ -65,18 +64,18 @@
         "static",
         "ospf",
         "bgp",
-        "ssh"
+        "ssh",
+        "default_gateway"
       ],
-      "note": "Planned for Phase 4."
+      "note": "Built in Phase 4A from Arista documentation; experimental until the cEOS-lab checklist passes. NAT depends on the hardware."
     },
     {
       "_id": "juniper_junos",
       "name": "Juniper Junos (ELS)",
       "vendor": "Juniper",
-      "support": "planned",
+      "support": "experimental",
       "connections": [
         "ssh",
-        "serial",
         "telnet_lab"
       ],
       "apply_mode": "commit",
@@ -94,24 +93,23 @@
         "static",
         "ospf",
         "bgp",
-        "ssh"
+        "ssh",
+        "default_gateway"
       ],
-      "note": "Planned for Phase 4. Commit model: no separate save."
+      "note": "Built in Phase 4A (EX/vJunos ELS syntax, SRX for NAT); experimental until the vJunos checklist passes."
     },
     {
       "_id": "aruba_aoscx",
       "name": "HPE Aruba AOS-CX",
       "vendor": "HPE Aruba",
-      "support": "planned",
+      "support": "experimental",
       "connections": [
-        "ssh",
-        "serial",
-        "telnet_lab"
+        "ssh"
       ],
       "apply_mode": "immediate",
       "save_command": "write memory",
       "netmiko_device_type": "aruba_aoscx",
-      "rollback": "backup_restore",
+      "rollback": "checkpoint",
       "capabilities": [
         "vlans",
         "access",
@@ -122,15 +120,16 @@
         "static",
         "ospf",
         "bgp",
-        "ssh"
+        "ssh",
+        "default_gateway"
       ],
-      "note": "Planned for Phase 4."
+      "note": "Built in Phase 4A from the AOS-CX 10.10 guides; experimental until the Simulator checklist passes. No NAT on AOS-CX."
     },
     {
       "_id": "mikrotik_routeros",
       "name": "MikroTik RouterOS",
       "vendor": "MikroTik",
-      "support": "planned",
+      "support": "experimental",
       "connections": [
         "ssh"
       ],
@@ -144,13 +143,13 @@
         "trunk",
         "ssh"
       ],
-      "note": "Experimental driver planned for Phase 4 (disabled unless ENABLE_EXPERIMENTAL_DRIVERS=true)."
+      "note": "Experimental (Phase 4A): bridge VLAN filtering, identity, user + SSH on RouterOS v7. No automatic rollback; disabled unless ENABLE_EXPERIMENTAL_DRIVERS=true."
     },
     {
       "_id": "huawei_vrp",
       "name": "Huawei VRP",
       "vendor": "Huawei",
-      "support": "planned",
+      "support": "experimental",
       "connections": [
         "ssh"
       ],
@@ -164,13 +163,13 @@
         "trunk",
         "ssh"
       ],
-      "note": "Experimental driver planned for Phase 4."
+      "note": "Experimental (Phase 4A): VLANs, access/trunk ports, sysname, AAA user + STelnet on S-series V200. No automatic rollback; disabled unless ENABLE_EXPERIMENTAL_DRIVERS=true."
     },
     {
       "_id": "dlink_ds",
       "name": "D-Link DGS (CLI)",
       "vendor": "D-Link",
-      "support": "planned",
+      "support": "experimental",
       "connections": [
         "ssh"
       ],
@@ -184,13 +183,13 @@
         "trunk",
         "ssh"
       ],
-      "note": "Experimental driver planned for Phase 4."
+      "note": "Experimental (Phase 4A): DGS-1210 CLI VLANs, PVIDs, system name, account password + SSH. No automatic rollback; disabled unless ENABLE_EXPERIMENTAL_DRIVERS=true."
     },
     {
       "_id": "tplink_jetstream",
       "name": "TP-Link JetStream",
       "vendor": "TP-Link",
-      "support": "planned",
+      "support": "experimental",
       "connections": [
         "ssh"
       ],
@@ -204,7 +203,7 @@
         "trunk",
         "ssh"
       ],
-      "note": "Experimental driver planned for Phase 4."
+      "note": "Experimental (Phase 4A): JetStream VLANs (switchport general/pvid), hostname, user + SSH. No automatic rollback; disabled unless ENABLE_EXPERIMENTAL_DRIVERS=true."
     },
     {
       "_id": "ap_controller",
@@ -230,7 +229,7 @@
       "netmiko_device_type": null,
       "rollback": "none",
       "capabilities": [],
-      "note": "Read-only ONVIF information planned for Phase 4."
+      "note": "Read-only ONVIF device information (manufacturer, model, firmware, serial). The camera login is used once and never stored."
     },
     {
       "_id": "unmanaged",
@@ -243,7 +242,7 @@
       "netmiko_device_type": null,
       "rollback": "none",
       "capabilities": [],
-      "note": "Inventory only \u2013 there is nothing to configure."
+      "note": "Inventory only – there is nothing to configure."
     }
   ],
   "brands": [
@@ -743,7 +742,9 @@
         "ge-0/0/0",
         "ge-0/0/9"
       ],
-      "capabilities_exclude": [],
+      "capabilities_exclude": [
+        "nat"
+      ],
       "source": "sample",
       "verified": false,
       "driver_flags": {}
@@ -766,8 +767,7 @@
         "xe-0/1/3"
       ],
       "capabilities_exclude": [
-        "nat",
-        "bgp"
+        "nat"
       ],
       "source": "sample",
       "verified": false,
@@ -835,10 +835,10 @@
         "1/1/28"
       ],
       "capabilities_exclude": [
-        "routed_if",
         "dhcp",
         "ospf",
-        "bgp"
+        "bgp",
+        "routed_if"
       ],
       "source": "sample",
       "verified": false,

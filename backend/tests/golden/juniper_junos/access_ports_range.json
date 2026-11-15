@@ -1,0 +1,23 @@
+{
+  "model_id": "juniper-vjunos-switch",
+  "plan": {
+    "vlans": [
+      {
+        "id": 10,
+        "name": "Sales"
+      }
+    ],
+    "access": [
+      {
+        "interfaces": [
+          "ge-0/0/0",
+          "ge-0/0/1",
+          "ge-0/0/2"
+        ],
+        "vlan": 10,
+        "description": "Sales desks",
+        "portfast": false
+      }
+    ]
+  }
+}

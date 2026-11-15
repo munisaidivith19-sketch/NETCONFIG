@@ -1,0 +1,10 @@
+set interfaces ge-0/0/0 unit 0 family inet address 203.0.113.2/30
+set routing-options router-id 10.255.255.4
+set routing-options autonomous-system 65010
+set protocols bgp group NCS-EBGP type external
+set protocols bgp group NCS-EBGP neighbor 203.0.113.1 peer-as 64500
+set protocols bgp group NCS-EBGP neighbor 203.0.113.1 description ISP-A
+set policy-options policy-statement NCS-BGP-EXPORT term NETS from route-filter 198.51.100.0/24 exact
+set policy-options policy-statement NCS-BGP-EXPORT term NETS then accept
+set policy-options policy-statement NCS-BGP-EXPORT term REJECT then reject
+set protocols bgp group NCS-EBGP export NCS-BGP-EXPORT

@@ -1,0 +1,12 @@
+{
+  "model_id": "dlink-dgs-1210-28",
+  "plan": {
+    "hardening": {
+      "banner": "Authorised access only"
+    }
+  },
+  "expect_errors": {
+    "hardening.login_block": "not supported",
+    "hardening.banner": "not supported"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "model_id": "aruba-cx-simulator",
+  "plan": {
+    "interfaces": [
+      {
+        "interface": "1/1/1",
+        "ip": "203.0.113.2/30",
+        "description": "ISP"
+      },
+      {
+        "interface": "1/1/2",
+        "ip": "10.0.0.1/24",
+        "description": "LAN"
+      }
+    ],
+    "nat": {
+      "inside_interfaces": [
+        "1/1/2"
+      ],
+      "outside_interface": "1/1/1",
+      "inside_networks": [
+        "10.0.0.0/24"
+      ]
+    }
+  },
+  "expect_errors": {
+    "nat": "not supported"
+  }
+}

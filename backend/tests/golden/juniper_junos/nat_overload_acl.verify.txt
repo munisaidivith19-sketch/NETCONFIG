@@ -1,0 +1,2 @@
+show configuration | display set
+show interfaces terse

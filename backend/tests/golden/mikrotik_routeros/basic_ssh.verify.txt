@@ -1,0 +1,2 @@
+/system identity print
+/user print terse

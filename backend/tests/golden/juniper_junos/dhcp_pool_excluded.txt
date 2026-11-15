@@ -1,0 +1,10 @@
+set interfaces ge-0/0/0 unit 0 family inet address 10.0.30.1/24
+set access address-assignment pool GUEST family inet network 10.0.30.0/24
+set access address-assignment pool GUEST family inet range R1 low 10.0.30.21
+set access address-assignment pool GUEST family inet range R1 high 10.0.30.253
+set access address-assignment pool GUEST family inet dhcp-attributes router 10.0.30.1
+set access address-assignment pool GUEST family inet dhcp-attributes name-server 9.9.9.9
+set access address-assignment pool GUEST family inet dhcp-attributes name-server 1.1.1.1
+set access address-assignment pool GUEST family inet dhcp-attributes domain-name guest.example.net
+set access address-assignment pool GUEST family inet dhcp-attributes maximum-lease-time 172800
+set system services dhcp-local-server group GUEST interface ge-0/0/0.0

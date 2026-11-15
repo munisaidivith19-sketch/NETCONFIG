@@ -17,7 +17,9 @@ C9300 = ModelInfo.from_doc(MODELS["cisco-c9300-24t"])  # Gi1/0/1-24, Te1/1/1-4
 def run(plan: dict, model: ModelInfo = C9300, caps=ALL_CAPABILITIES):
     driver = CiscoIos(model)
     p = normalize_interfaces(ConfigPlan.model_validate(plan), driver.normalize_interface)
-    return validate_plan(p, model=model, capabilities=set(caps), os_name=driver.os_name)
+    r = validate_plan(p, model=model, capabilities=set(caps), os_name=driver.os_name)
+    r.errors.update(driver.review(p)[0])  # OS-specific rules (planning.py merges them the same way)
+    return r
 
 
 def schema_errors(plan: dict) -> dict[str, str]:

@@ -1,0 +1,3 @@
+config snmp system_name access-sw1
+config account netadmin encrypt plain_text ********
+enable ssh

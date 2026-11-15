@@ -1,0 +1,25 @@
+{
+  "model_id": "huawei-s5735-l24t4s-a",
+  "plan": {
+    "vlans": [
+      {
+        "id": 10,
+        "name": "Sales"
+      },
+      {
+        "id": 20,
+        "name": "Engineering"
+      }
+    ],
+    "trunks": [
+      {
+        "interface": "XGigabitEthernet0/0/1",
+        "allowed_vlans": [
+          10,
+          20
+        ],
+        "native_vlan": 1
+      }
+    ]
+  }
+}

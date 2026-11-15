@@ -1,0 +1,10 @@
+vlan 10
+ name Sales
+ exit
+vlan 20
+ name Engineering
+ exit
+interface gigabitEthernet 1/0/9
+ switchport general allowed vlan 10,20 tagged
+ no switchport general allowed vlan 1
+ exit

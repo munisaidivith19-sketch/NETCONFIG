@@ -1,0 +1,21 @@
+{
+  "model_id": "aruba-cx-simulator",
+  "plan": {
+    "routing": {
+      "eigrp": {
+        "asn": 100,
+        "router_id": "10.255.255.3",
+        "networks": [
+          "10.0.0.0/24",
+          "10.255.0.0/30"
+        ],
+        "passive_interfaces": [
+          "1/1/1"
+        ]
+      }
+    }
+  },
+  "expect_errors": {
+    "routing.eigrp": "not supported"
+  }
+}

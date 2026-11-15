@@ -1,0 +1,17 @@
+{
+  "model_id": "mikrotik-crs326-24g-2s",
+  "plan": {
+    "basic": {
+      "hostname": "access-sw1"
+    },
+    "hardening": {
+      "password_encryption": false,
+      "disable_http": false,
+      "login_block": null
+    },
+    "ssh": {
+      "username": "netadmin",
+      "vty_timeout_minutes": 15
+    }
+  }
+}

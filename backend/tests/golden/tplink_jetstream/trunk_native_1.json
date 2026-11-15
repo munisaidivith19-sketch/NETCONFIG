@@ -1,0 +1,25 @@
+{
+  "model_id": "tplink-tl-sg2210p",
+  "plan": {
+    "vlans": [
+      {
+        "id": 10,
+        "name": "Sales"
+      },
+      {
+        "id": 20,
+        "name": "Engineering"
+      }
+    ],
+    "trunks": [
+      {
+        "interface": "gigabitEthernet1/0/9",
+        "allowed_vlans": [
+          10,
+          20
+        ],
+        "native_vlan": 1
+      }
+    ]
+  }
+}

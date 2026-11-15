@@ -1,0 +1,14 @@
+set interfaces ge-0/0/0 description ISP
+set interfaces ge-0/0/0 unit 0 family inet address 203.0.113.2/30
+set interfaces ge-0/0/1 description LAN
+set interfaces ge-0/0/1 unit 0 family inet address 10.0.0.1/24
+set security zones security-zone untrust interfaces ge-0/0/0.0
+set security zones security-zone trust interfaces ge-0/0/1.0
+set security nat source rule-set NCS-NAT from zone trust
+set security nat source rule-set NCS-NAT to zone untrust
+set security nat source rule-set NCS-NAT rule NCS-NAT-OUT match source-address 10.0.0.0/24
+set security nat source rule-set NCS-NAT rule NCS-NAT-OUT then source-nat interface
+set security policies from-zone trust to-zone untrust policy NCS-ALLOW-OUT match source-address any
+set security policies from-zone trust to-zone untrust policy NCS-ALLOW-OUT match destination-address any
+set security policies from-zone trust to-zone untrust policy NCS-ALLOW-OUT match application any
+set security policies from-zone trust to-zone untrust policy NCS-ALLOW-OUT then permit

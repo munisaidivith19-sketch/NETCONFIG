@@ -1,0 +1,9 @@
+{
+  "model_id": "juniper-srx300",
+  "plan": {
+    "basic": {
+      "hostname": "R1-Branch",
+      "domain": "lab.example.net"
+    }
+  }
+}

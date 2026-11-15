@@ -1,0 +1,4 @@
+/interface bridge vlan add bridge=bridge vlan-ids=10 comment=Sales tagged=sfp-sfpplus1
+/interface bridge vlan add bridge=bridge vlan-ids=20 comment=Engineering tagged=sfp-sfpplus1
+/interface bridge port set [find interface=sfp-sfpplus1] frame-types=admit-only-vlan-tagged ingress-filtering=yes
+/interface bridge set [find name=bridge] vlan-filtering=yes

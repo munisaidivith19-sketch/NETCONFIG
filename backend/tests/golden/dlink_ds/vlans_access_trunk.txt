@@ -1,0 +1,10 @@
+create vlan Sales tag 10
+create vlan Engineering tag 20
+create vlan Native tag 99
+config vlan vlanid 10 add untagged 2-4
+config port_vlan 2-4 pvid 10
+config vlan vlanid 1 add tagged 25
+config vlan vlanid 10 add tagged 25
+config vlan vlanid 20 add tagged 25
+config vlan vlanid 99 add untagged 25
+config port_vlan 25 pvid 99

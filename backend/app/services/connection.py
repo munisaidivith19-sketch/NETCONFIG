@@ -40,7 +40,7 @@ class Connection(Protocol):
     def enter_config(self, command: str) -> str: ...
     def config_line(self, command: str, prompts: list[tuple[str, str]] | None = None) -> str: ...
     def exit_config(self) -> str: ...
-    def exec(self, command: str) -> str: ...
+    def exec(self, command: str, prompts: list[tuple[str, str]] | None = None) -> str: ...
     def close(self) -> None: ...
 
 
@@ -68,6 +68,7 @@ class ConnectParams:
     serial_port: str | None = None
     baud: int = 9600
     pinned_key: HostKey | None = None  # SSH: the only host key that will be accepted
+    config_prompt: str = CONFIG_PROMPT  # the driver's config-mode prompt (Driver.config_prompt)
 
 
 def probe_host_key(host: str, port: int, timeout: float = 10.0) -> HostKey:
@@ -92,8 +93,9 @@ def probe_host_key(host: str, port: int, timeout: float = 10.0) -> HostKey:
 
 
 class NetmikoConnection:
-    def __init__(self, conn):
+    def __init__(self, conn, config_prompt: str = CONFIG_PROMPT):
         self._c = conn
+        self._prompt = config_prompt
 
     def _call(self, fn, *args, **kwargs) -> str:
         try:
@@ -108,17 +110,17 @@ class NetmikoConnection:
         return self._call(self._c.config_mode, config_command=command)
 
     def config_line(self, command: str, prompts: list[tuple[str, str]] | None = None) -> str:
-        if not prompts:
+        if prompts is None:
             return self._call(self._c.send_config_set, [command], enter_config_mode=False, exit_config_mode=False,
                               cmd_verify=True, read_timeout=60)
-        # A command that may ask a question (RSA "replace? [yes/no]"): wait for either the question or the
-        # config prompt, answer once, then wait for the prompt. Never waits forever (read_timeout).
-        expect = "|".join([CONFIG_PROMPT, *[p for p, _ in prompts]])
+        # A command that may ask a question (RSA "replace? [yes/no]") or takes long (Junos "commit confirmed"):
+        # wait for the question or the config prompt, answer once, then wait for the prompt. Never waits forever.
+        expect = "|".join([self._prompt, *[p for p, _ in prompts]])
         out = self._call(self._c.send_command, command, expect_string=expect, read_timeout=180,
                          strip_prompt=False, strip_command=False, cmd_verify=False)
         for pattern, answer in prompts:
             if re.search(pattern, out):
-                out += self._call(self._c.send_command, answer, expect_string=CONFIG_PROMPT, read_timeout=300,
+                out += self._call(self._c.send_command, answer, expect_string=self._prompt, read_timeout=300,
                                   strip_prompt=False, strip_command=False, cmd_verify=False)
                 break
         return out
@@ -126,8 +128,21 @@ class NetmikoConnection:
     def exit_config(self) -> str:
         return self._call(self._c.exit_config_mode)
 
-    def exec(self, command: str) -> str:
-        return self._call(self._c.send_command, command, read_timeout=120)
+    def exec(self, command: str, prompts: list[tuple[str, str]] | None = None) -> str:
+        if not prompts:
+            return self._call(self._c.send_command, command, read_timeout=120)
+        # An exec command that asks a question (Huawei "save": "Are you sure to continue?[Y/N]"): wait for the
+        # question or the exec prompt (the host name at the end of the output), answer once, wait for the prompt.
+        prompt = re.escape(self._c.base_prompt) + r"[^\n]*[>#\]]\s*$"
+        expect = "|".join([*[p for p, _ in prompts], prompt])
+        out = self._call(self._c.send_command, command, expect_string=expect, read_timeout=180,
+                         strip_prompt=False, strip_command=False, cmd_verify=False)
+        for pattern, answer in prompts:
+            if re.search(pattern, out):
+                out += self._call(self._c.send_command, answer, expect_string=prompt, read_timeout=300,
+                                  strip_prompt=False, strip_command=False, cmd_verify=False)
+                break
+        return out
 
     def close(self) -> None:
         try:
@@ -173,7 +188,7 @@ def open_netmiko(params: ConnectParams) -> NetmikoConnection:
         conn = ConnectHandler(**args)
         if params.secret is not None or not conn.check_enable_mode():
             conn.enable()
-        return NetmikoConnection(conn)
+        return NetmikoConnection(conn, params.config_prompt)
     except NetmikoAuthenticationException as exc:
         raise ConnectFailed("auth", "Login failed: check the username and password (not retried).") from exc
     except BadHostKeyException as exc:

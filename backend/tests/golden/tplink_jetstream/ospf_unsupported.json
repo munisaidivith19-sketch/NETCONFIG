@@ -1,0 +1,26 @@
+{
+  "model_id": "tplink-tl-sg2210p",
+  "plan": {
+    "routing": {
+      "ospf": {
+        "process_id": 1,
+        "router_id": "10.255.255.2",
+        "interfaces": [
+          {
+            "interface": "Loopback0",
+            "area": 0
+          }
+        ]
+      }
+    },
+    "interfaces": [
+      {
+        "interface": "Loopback0",
+        "ip": "10.255.255.2/32"
+      }
+    ]
+  },
+  "expect_errors": {
+    "routing.ospf": "not supported"
+  }
+}

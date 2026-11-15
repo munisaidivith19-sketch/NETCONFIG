@@ -1,0 +1,19 @@
+{
+  "model_id": "juniper-ex2300-24t",
+  "plan": {
+    "vlans": [
+      {
+        "id": 99,
+        "name": "MGMT"
+      }
+    ],
+    "svis": [
+      {
+        "vlan": 99,
+        "ip": "10.10.10.2/24",
+        "description": "management"
+      }
+    ],
+    "default_gateway": "10.10.10.1"
+  }
+}

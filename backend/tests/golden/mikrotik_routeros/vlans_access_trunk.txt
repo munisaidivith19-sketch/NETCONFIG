@@ -1,0 +1,8 @@
+/interface bridge vlan add bridge=bridge vlan-ids=10 comment=Sales tagged=sfp-sfpplus1
+/interface bridge vlan add bridge=bridge vlan-ids=20 comment=Engineering tagged=sfp-sfpplus1
+/interface bridge vlan add bridge=bridge vlan-ids=99 comment=Native
+/interface bridge port set [find interface=ether2] pvid=10 frame-types=admit-only-untagged-and-priority-tagged ingress-filtering=yes
+/interface bridge port set [find interface=ether3] pvid=10 frame-types=admit-only-untagged-and-priority-tagged ingress-filtering=yes
+/interface bridge port set [find interface=ether4] pvid=10 frame-types=admit-only-untagged-and-priority-tagged ingress-filtering=yes
+/interface bridge port set [find interface=sfp-sfpplus1] pvid=99 frame-types=admit-all ingress-filtering=yes
+/interface bridge set [find name=bridge] vlan-filtering=yes

@@ -1,0 +1,6 @@
+hostname core1
+dns domain lab.example.net
+username netadmin privilege 15 role network-admin secret ********
+enable password ********
+management ssh
+   idle-timeout 15

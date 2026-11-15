@@ -1,0 +1,16 @@
+{
+  "model_id": "juniper-vjunos-switch",
+  "plan": {
+    "basic": {
+      "hostname": "core1",
+      "domain": "lab.example.net"
+    },
+    "ssh": {
+      "username": "netadmin",
+      "password": "Lab-Pass-2026",
+      "set_enable_secret": false,
+      "rsa_modulus": 2048,
+      "vty_timeout_minutes": 15
+    }
+  }
+}

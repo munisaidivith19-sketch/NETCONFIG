@@ -7,9 +7,10 @@ connecting → backing_up → checking → applying → verifying → (confirm) 
                                                                                     └► failed (MANUAL ACTION)
 
 Nothing in a StepResult contains a secret: every text is masked and scrubbed of the known secret values.
-The config is applied inside the device's own rollback window (Cisco: "configure terminal revert timer N"),
-so if this app crashes or the link drops, the device restores its previous configuration by itself.
-Every vendor command and output format comes from the Driver; this module has none of its own.
+The config is applied inside the device's own rollback window (Cisco "configure terminal revert timer N", Junos
+"commit confirmed N", EOS "commit timer", AOS-CX "checkpoint auto N"), so if this app crashes or the link drops,
+the device restores its previous configuration by itself. How the window is opened, confirmed and rolled back
+comes from the driver's Session; every vendor command and output format comes from the Driver, none from here.
 """
 
 import re
@@ -22,7 +23,7 @@ from functools import lru_cache
 from pydantic import SecretStr
 
 from .. import clock
-from ..drivers.base import Check, Driver
+from ..drivers.base import Check, Driver, Session
 from ..models.plan import ConfigPlan
 from ..security.masking import MASK, mask_text
 from . import safety
@@ -44,6 +45,7 @@ class StepInput:
     params: ConnectParams
     mgmt_ip: str | None
     secrets: list[SecretStr]  # every secret value of this run, scrubbed from all stored text
+    session: Session | None = None  # set by apply(): how this change is confirmed or rolled back
 
 
 @dataclass
@@ -115,14 +117,13 @@ def _mentions(config: str, ip: str) -> bool:
 
 @dataclass
 class Held:
-    """Applied and verified, not yet confirmed: the device's revert timer is still running."""
+    """Applied and verified, not yet confirmed: the device's rollback timer is still running."""
 
     conn: Connection
     step: StepInput
     res: StepResult
     log: Transcript
     deadline: datetime
-    steps: dict
     confirmed: bool = False  # set by confirm(): the revert timer is cancelled, only the save is left
 
 
@@ -205,9 +206,8 @@ class PushEngine:
                                                     _show_all(conn, log, driver, driver.precheck_commands(plan)))
             res.notes += notes
             res.commands = [log.scrub(c) for c in commands]
-            violations = safety.check_denylist(commands) + safety.check_management(
-                commands, mgmt_interface=mgmt_if, mgmt_ip=step.mgmt_ip, via_ssh=via_ssh,
-                normalize_interface=driver.normalize_interface)
+            violations = safety.check_denylist(commands, driver.denylist()) + safety.management_violations(
+                driver, commands, mgmt_interface=mgmt_if, mgmt_ip=step.mgmt_ip, via_ssh=via_ssh)
             if violations:
                 v = violations[0]
                 res.status = "blocked"
@@ -215,14 +215,11 @@ class PushEngine:
                              log.scrub(v.command.strip()))}
                 return res
 
-            strategy = driver.rollback_strategy()
-            if strategy != "revert_timer":
-                raise NotImplementedError(f"rollback strategy {strategy}")  # Phase 4 drivers
-            steps = driver.session_steps(plan)
+            sess = step.session = driver.session(plan, session_name())
             setup = driver.rollback_setup(running)
             if setup:
                 # Prerequisite for the device's own rollback (Cisco: a configuration archive), in its own session.
-                conn.enter_config(steps["configure"][0])
+                conn.enter_config(sess.configure)
                 for line in setup:
                     out = conn.config_line(line)
                     log.add(line, out)
@@ -235,21 +232,46 @@ class PushEngine:
                 res.notes.append(f"Configured '{setup[0].strip()}' (needed for the automatic rollback).")
 
             self._state("applying")  # last point where a cancel is honoured
-            applied = True
             deadline = clock.now() + timedelta(minutes=plan.revert_minutes)
-            begin = steps["begin"][0]
-            log.add(begin, conn.enter_config(begin))
-            res.notes.append(f"Automatic rollback armed: the device restores its old config at "
-                             f"{deadline:%H:%M:%S} UTC unless the change is confirmed.")
+            for cmd in sess.start:  # e.g. AOS-CX "checkpoint auto N": the timer starts before config mode
+                applied = True
+                out = conn.exec(cmd)
+                log.add(cmd, out)
+                err = find_error(driver, out)
+                if err:
+                    res.error = {"command": cmd, "message": log.scrub(err)}
+                    return res if cmd == sess.start[0] else self._rollback(conn, step, res, log, deadline)
+            applied = applied or sess.applies_immediately
+            out = conn.enter_config(sess.begin)
+            log.add(sess.begin, out)
+            err = find_error(driver, out)
+            if err:  # e.g. EOS: too many pending sessions. Nothing of the plan was sent.
+                res.error = {"command": sess.begin, "message": log.scrub(err)}
+                conn.exit_config()
+                return self._rollback(conn, step, res, log, deadline) if sess.start else res
             for cmd in commands:
                 out = conn.config_line(cmd, driver.prompts(cmd))
                 log.add(cmd, out)
                 err = find_error(driver, out)
                 if err:
                     res.error = {"command": log.scrub(cmd), "message": log.scrub(err)}
-                    conn.exit_config()
-                    return self._rollback(conn, step, res, log, deadline)
-            conn.exit_config()
+                    return self._stop_in_config(conn, step, res, log, deadline)
+            for cmd in sess.arm:  # commit-based OS: check, then commit with the device's own timer
+                applied = True
+                out = conn.config_line(cmd, driver.prompts(cmd))
+                log.add(cmd, out)
+                err = find_error(driver, out)
+                if err:
+                    # A refused check or commit leaves the change uncommitted: it is discarded, nothing was applied.
+                    res.error = {"command": cmd, "message": log.scrub(err)}
+                    return self._stop_in_config(conn, step, res, log, deadline, committed=False)
+            _leave(conn, log, sess)
+            if sess.timer:
+                res.notes.append(f"Automatic rollback armed: the device restores its old config at "
+                                 f"{deadline:%H:%M:%S} UTC unless the change is confirmed.")
+            else:
+                res.notes.append("This OS has no automatic rollback: a failure from now on needs a manual restore "
+                                 "from the backup.")
 
             self.on_state("verifying")
             outputs = _show_all(conn, log, driver, driver.verify_commands(plan))
@@ -259,7 +281,7 @@ class PushEngine:
             if failed:
                 res.error = {"command": None, "message": f"Verification failed: {failed[0].name} ({failed[0].detail})"}
                 return self._rollback(conn, step, res, log, deadline)
-            held = Held(conn=conn, step=step, res=res, log=log, deadline=deadline, steps=steps)
+            held = Held(conn=conn, step=step, res=res, log=log, deadline=deadline)
             return held
         except Cancelled:
             res.status = "cancelled"
@@ -283,6 +305,23 @@ class PushEngine:
                 if conn is not None:
                     conn.close()
 
+    def _stop_in_config(self, conn: Connection, step: StepInput, res: StepResult, log: Transcript, deadline,
+                        committed: bool | None = None) -> StepResult:
+        """A command was refused inside the config session. An OS that applies each line at once is rolled back;
+        a candidate that was never committed is discarded, so the device never ran any of it."""
+        sess = step.session
+        if committed is None:
+            committed = sess.applies_immediately
+        if committed:
+            _leave(conn, log, sess)
+            return self._rollback(conn, step, res, log, deadline)
+        for cmd in sess.discard:
+            log.add(cmd, conn.config_line(cmd))
+        _leave(conn, log, sess)
+        res.status = "failed"
+        res.notes.append("Nothing was applied: the uncommitted changes were discarded.")
+        return res
+
     def commit(self, held: "Held") -> StepResult:
         """Confirm a verified change (this cancels the revert timer), then save it."""
         return self.confirm(held) or self.save(held)
@@ -298,17 +337,16 @@ class PushEngine:
                 res.error = {"command": None, "message": "The revert timer ran out before the change could be "
                              "confirmed; the device restored its previous configuration by itself."}
                 return self._close(held)
-            confirm = held.steps["confirm"][0]
-            out = conn.exec(confirm)
-            log.add(confirm, out)
-            err = find_error(step.driver, out)
-            if err:
-                res.error = {"command": confirm, "message": err}
+            sess = step.session
+            refused = _send(conn, log, step.driver, sess.confirm, sess.confirm_in_config)
+            if refused:
+                res.error = {"command": refused[0], "message": refused[1]}
                 res.notes.append("The confirm failed, so the device will restore its old config when the timer ends.")
                 res.status = "rolled_back"
                 return self._close(held)
             held.confirmed = True
-            res.notes.append("Change confirmed; the rollback timer is cancelled.")
+            if sess.timer:
+                res.notes.append("Change confirmed; the rollback timer is cancelled.")
             return None
         except ConnectionLost:
             res.error = res.error or {"command": None, "message": "The connection was lost before the confirm."}
@@ -324,7 +362,7 @@ class PushEngine:
             save = step.driver.save_command()
             if step.plan.save and save:
                 self.on_state("saving")
-                out = conn.exec(save)
+                out = conn.exec(save, step.driver.prompts(save))
                 log.add(save, out)
                 err = find_error(step.driver, out)
                 if err:
@@ -371,7 +409,18 @@ class PushEngine:
     def _rollback(self, conn: Connection | None, step: StepInput, res: StepResult, log: Transcript,
                   deadline) -> StepResult:
         self.on_state("rolling_back")
-        revert = step.driver.session_steps(step.plan)["revert"][0]
+        sess = step.session
+        if not sess.revert and sess.timer:
+            res.status = "rolled_back"
+            when = f" at {deadline:%H:%M:%S} UTC" if deadline else " when its timer ends"
+            res.notes.append(f"Not confirmed: {step.driver.os_name} restores its previous configuration by itself"
+                             f"{when}. Do not push to it again before then.")
+            return res
+        if not sess.revert:
+            res.status = "failed"
+            res.notes.append(f"{MANUAL}: {step.driver.os_name} has no automatic rollback. The change may be partly "
+                             "active; restore the device from the backup saved with this job.")
+            return res
         reopened: list[Connection] = []  # connections opened here are closed here; run() closes `conn`
         try:
             for attempt in ("current", "reconnect"):
@@ -379,28 +428,56 @@ class PushEngine:
                     if attempt == "reconnect" or conn is None:
                         conn = self.open_connection(step.params, res.notes)
                         reopened.append(conn)
-                    out = conn.exec(revert)
-                    log.add(revert, out)
-                    refused = find_error(step.driver, out)
+                    refused = _send(conn, log, step.driver, sess.revert, sess.revert_in_config)
                     if refused:
                         res.status = "failed"
-                        res.notes.append(f"{MANUAL}: '{revert}' was refused ({refused}). "
-                                         "Check the device; its revert timer may still restore the old config.")
+                        res.notes.append(f"{MANUAL}: '{refused[0]}' was refused ({refused[1]}). "
+                                         "Check the device; its rollback timer may still restore the old config.")
                         return res
                     res.status = "rolled_back"
                     res.notes.append("Rolled back: the previous configuration was restored.")
                     return res
                 except (ConnectionLost, ConnectFailed):
                     continue
-            # Could not reach the device: the revert timer on the device restores the config by itself.
+            # Could not reach the device: the timer on the device restores the config by itself.
             res.status = "rolled_back"
             when = f" at {deadline:%H:%M:%S} UTC" if deadline else ""
-            res.notes.append(f"Device unreachable: it restores its previous configuration by its revert timer{when}. "
-                             "Check it is reachable again afterwards.")
+            res.notes.append(f"Device unreachable: it restores its previous configuration by its rollback timer"
+                             f"{when}. Check it is reachable again afterwards.")
             return res
         finally:
             for c in reopened:
                 c.close()
+
+
+def session_name() -> str:
+    """A unique name for this change (EOS configuration sessions are named)."""
+    return f"ncs-{clock.now():%Y%m%d-%H%M%S}"
+
+
+def _send(conn: Connection, log: Transcript, driver: Driver, commands: tuple[str, ...],
+          in_config: str | None) -> tuple[str, str] | None:
+    """Send confirm / revert commands, in exec mode or inside the given config session. Returns the first
+    (command, error) the device refused, or None."""
+    if in_config:
+        log.add(in_config, conn.enter_config(in_config))
+    try:
+        for cmd in commands:
+            out = conn.config_line(cmd, driver.prompts(cmd)) if in_config else conn.exec(cmd)
+            log.add(cmd, out)
+            err = find_error(driver, out)
+            if err:
+                return cmd, log.scrub(err)
+        return None
+    finally:
+        if in_config:
+            conn.exit_config()
+
+
+def _leave(conn: Connection, log: Transcript, sess: Session) -> None:
+    for cmd in sess.leave:
+        log.add(cmd, conn.config_line(cmd))
+    conn.exit_config()
 
 
 def _check_out(c: Check, log: Transcript) -> dict:
