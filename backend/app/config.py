@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     enable_experimental_drivers: bool = False
     # Development only: pushes go to an in-memory simulated device instead of the network (demo / tests).
     simulate_devices: bool = False
+    # Background ping + port check of every device with a management address (0 turns it off).
+    status_poll_seconds: int = Field(default=60, ge=0, le=86400)
     frontend_dist: Path = BACKEND_DIR.parent / "frontend" / "dist"
 
     @property

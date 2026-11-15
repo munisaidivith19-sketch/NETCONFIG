@@ -125,8 +125,18 @@ class DeviceOut(BaseModel):
     status: dict
     uplink: dict | None = None
     facts: dict | None = None  # read-only information read from the device (ONVIF, show version)
+    neighbors: list[dict] | None = None  # LLDP / CDP neighbours from the last discovery
+    vlans: list[dict] | None = None  # VLAN table from the last discovery
     created_at: datetime | None
     updated_at: datetime | None
+
+
+class DiscoverRequest(StrictModel):
+    """Device login for one read-only discovery. Held in memory for this request only (CLAUDE.md 8.3)."""
+
+    username: Annotated[str, StringConstraints(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._@-]+$")]
+    password: Annotated[SecretStr, Field(min_length=1, max_length=128)]
+    enable_secret: Annotated[SecretStr, Field(min_length=1, max_length=128)] | None = None
 
 
 class OnvifRequest(StrictModel):

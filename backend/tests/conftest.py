@@ -25,7 +25,7 @@ PASSWORDS = {"admin": "Blue-Harbor-Lamp-71", "engineer": "Quiet-River-Stone-42",
 
 def make_settings(**overrides) -> Settings:
     values = {"env": "test", "mongo_db": TEST_DB, "port": 8000, "bcrypt_rounds": 12,
-              "frontend_dist": "does-not-exist", "_env_file": None}
+              "frontend_dist": "does-not-exist", "status_poll_seconds": 0, "_env_file": None}
     values.update(overrides)
     return Settings(**values)
 

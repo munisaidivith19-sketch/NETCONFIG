@@ -108,6 +108,12 @@ class SimulatedDevice:
         c = command.strip()
         if c == "show running-config":
             return self.running_config()
+        if c == "show version":
+            host = next((t.split(" ", 1)[1] for t in self.top if t.startswith("hostname ")), "Switch")
+            return ("Cisco IOS Software, vios_l2 Software (vios_l2-ADVENTERPRISEK9-M), Version 15.2(20200924:215240), "
+                    f"SIMULATED\n{host} uptime is 1 hour, 2 minutes\n"
+                    "cisco IOSvL2 (Simulated) processor with 1048576K bytes of memory.\n"
+                    "Processor board ID SIM0000001\n")
         if c == "show ip interface brief":
             rows = ["Interface              IP-Address      OK? Method Status                Protocol"]
             for name, body in self._interfaces().items():

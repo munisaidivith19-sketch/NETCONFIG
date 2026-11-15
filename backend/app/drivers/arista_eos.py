@@ -11,7 +11,7 @@ from ..models.plan import ConfigPlan
 from ..security.masking import MASK
 from .base import Check, Kind, ModelInfo, Session, UnsupportedFeature, vlan_list
 from .cisco_ios import parse_running_config
-from .common import dhcp_interface, dhcp_range, first, logical, normalize_by_types, section_checks
+from .common import dhcp_interface, dhcp_range, first, logical, normalize_by_types, section_checks, vlan_rows
 
 CAPABILITIES = {"vlans", "access", "trunk", "svi", "routed_if", "dhcp", "nat", "static", "ospf", "bgp", "ssh",
                 "default_gateway"}  # no EIGRP on EOS
@@ -293,6 +293,12 @@ class AristaEos:
         return {"model": first(r"^Arista (\S+)", v), "version": first(r"^Software image version:\s*(\S+)", v),
                 "serial": first(r"^Serial number:\s*(\S+)", v),
                 "hostname": first(r"^Hostname:\s*(\S+)", outputs.get("show hostname", ""))}
+
+    def vlan_commands(self) -> list[str]:
+        return ["show vlan"]
+
+    def parse_vlans(self, outputs: dict[str, str]) -> list[dict]:
+        return vlan_rows(outputs.get("show vlan", ""), r"^(?P<id>\d+)\s+(?P<name>\S+)\s+(?:active|suspended)")
 
     def neighbor_commands(self) -> list[str]:
         return ["show lldp neighbors detail"]

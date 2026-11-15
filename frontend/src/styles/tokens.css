@@ -87,6 +87,11 @@
   --series-3: #c2410c;
   --series-4: #7c3aed;
   --grid-line: rgba(15, 31, 26, 0.09);
+  /* Job outcome charts (status meaning): checked with the dataviz validator against the light surface */
+  --chart-good: #0f9d6b;
+  --chart-bad: #c2410c;
+  --chart-1: #2563eb;
+  --chart-gap: #f4f7f6;
 
   --code-bg: rgba(15, 31, 26, 0.05);
   --overlay: rgba(10, 20, 16, 0.35);
@@ -142,6 +147,11 @@
   --series-3: #fb923c;
   --series-4: #c4b5fd;
   --grid-line: rgba(255, 255, 255, 0.08);
+  /* Darker steps than the series colours: these pass the dark-surface lightness band */
+  --chart-good: #22a06f;
+  --chart-bad: #e36d26;
+  --chart-1: #4f8ff0;
+  --chart-gap: #141e1b;
 
   --code-bg: rgba(0, 0, 0, 0.28);
   --overlay: rgba(0, 0, 0, 0.55);

@@ -146,3 +146,5 @@ class Driver(Protocol):
     def parse_facts(self, outputs: dict[str, str]) -> dict: ...  # {"model", "version", "serial", "hostname"}
     def neighbor_commands(self) -> list[str]: ...
     def parse_neighbors(self, outputs: dict[str, str]) -> list[dict]: ...  # [{"local", "remote", "port"}]
+    def vlan_commands(self) -> list[str]: ...  # the VLAN table ("show vlan brief" or the OS equivalent)
+    def parse_vlans(self, outputs: dict[str, str]) -> list[dict]: ...  # [{"id": 10, "name": "Staff"}]

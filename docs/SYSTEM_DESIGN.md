@@ -198,6 +198,11 @@ is written down in `docs/SECURITY.md`.
 **`settings`**: a single document, `_id: "global"` (approval required for production, revert timer
 minutes, polling interval).
 
+**`status_samples`** (Phase 4B): one document per status check, `{at, up, down, unknown}`. A TTL index on
+`at` deletes samples after 14 days. Per-device results live in `devices.status`
+(`{reachable, ping, latency_ms, checked_at}`); discovery adds `devices.facts` (`source: "cli"`, model,
+version, serial, `match`), `devices.neighbors` (max 256, printable text only, 80 characters each) and `devices.vlans`.
+
 ### 4.2 Why separate catalog collections instead of one nested document
 A nested `brands → series → models` document would exceed practical sizes once the NetBox import runs
 (thousands of models), and it cannot be indexed per level. The trade-off is three small lookups
@@ -396,7 +401,9 @@ All routes are under `/api`. JSON only. Auth is the session cookie. State-changi
 | POST | `/hostkeys/{id}/accept` | A | accepts a changed key (audited) |
 | DELETE | `/hostkeys/{id}` | A | forget a key; the next connection pins whatever it is offered (audited) |
 | GET | `/audit?action=&user=&from=&to=&page=` | A | |
-| GET | `/status/overview` | V | Phase 4 KPIs |
+| POST | `/devices/{id}/discover` | E | device login in the body (used once, never stored) → runs read-only `show` commands; stores facts, OS/model match, neighbours, VLANs; 409 while a push holds the device lock; 10/min |
+| GET | `/overview` | V | KPIs, jobs per day (14 d), status history (24 h), devices by category, topology `{nodes, links}`, recent jobs |
+| POST | `/overview/refresh` | E | wakes the status poller; 409 when `STATUS_POLL_SECONDS=0`; 6/min |
 | POST | `/ai/draft`, `/ai/explain` | E | Phase 5, optional |
 
 **Errors:** `{ "error": { "code": "validation_error", "message": "…", "fields": {"vlans.0.id": "…"}, "request_id": "…" } }`.

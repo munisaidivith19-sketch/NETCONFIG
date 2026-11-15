@@ -121,6 +121,12 @@ class ExperimentalDriver:
     def rollback_setup(self, running_config: str) -> list[str]:
         return []
 
+    def vlan_commands(self) -> list[str]:
+        return []  # VLAN tables are read only by the built-in drivers
+
+    def parse_vlans(self, outputs: dict[str, str]) -> list[dict]:
+        return []
+
     def neighbor_commands(self) -> list[str]:
         return []  # topology discovery is not built for the experimental drivers
 

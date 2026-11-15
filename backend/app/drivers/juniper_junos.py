@@ -17,7 +17,7 @@ from ..models.plan import ConfigPlan
 from ..security.masking import MASK
 from ..security.shacrypt import sha512_crypt
 from .base import Check, Kind, ModelInfo, Session, UnsupportedFeature, vlan_list
-from .common import dhcp_interface, dhcp_range, first, logical
+from .common import dhcp_interface, dhcp_range, first, logical, vlan_rows
 
 CAPABILITIES = {"vlans", "access", "trunk", "svi", "routed_if", "dhcp", "nat", "static", "ospf", "bgp", "ssh",
                 "default_gateway"}  # no EIGRP: a Cisco protocol
@@ -372,6 +372,13 @@ class JuniperJunos:
         return {"model": first(r"^Model:\s*(\S+)", v), "version": first(r"^Junos:\s*(\S+)", v),
                 "hostname": first(r"^Hostname:\s*(\S+)", v),
                 "serial": first(r"^Chassis\s+(?:\S+\s+)?(\S+)\s+\S+", outputs.get("show chassis hardware", ""))}
+
+    def vlan_commands(self) -> list[str]:
+        return [] if self.srx else ["show vlans"]
+
+    def parse_vlans(self, outputs: dict[str, str]) -> list[dict]:
+        """ELS 'show vlans': Routing instance, VLAN name, Tag, Interfaces [LAB: confirm the columns]."""
+        return vlan_rows(outputs.get("show vlans", ""), r"^\s*\S+\s+(?P<name>[A-Za-z0-9_.-]+)\s+(?P<id>\d+)\b")
 
     def neighbor_commands(self) -> list[str]:
         return ["show lldp neighbors"]

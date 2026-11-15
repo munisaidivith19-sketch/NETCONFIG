@@ -94,6 +94,17 @@ def section_checks(commands: list[str], run: dict) -> list[Check]:
             for h, missing in checks.items()]
 
 
+def vlan_rows(text: str, pattern: str) -> list[dict]:
+    """[{'id': 10, 'name': 'Staff'}] from a VLAN table. ``pattern`` captures the VLAN ID and name (in either
+    order, as named groups ``id`` and ``name``)."""
+    rows = {}
+    for m in re.finditer(pattern, text or "", re.M):
+        vid = int(m.group("id"))
+        if 1 <= vid <= 4094:
+            rows.setdefault(vid, m.group("name")[:32])
+    return [{"id": vid, "name": name} for vid, name in sorted(rows.items())]
+
+
 def first(pattern: str, text: str, flags: int = re.M) -> str | None:
     m = re.search(pattern, text or "", flags)
     return m.group(1).strip() if m else None

@@ -9,6 +9,7 @@ import re
 from ..models.plan import ConfigPlan
 from ..security.masking import MASK
 from .base import Check, Kind, ModelInfo, Session, UnsupportedFeature, expand_vlan_list, vlan_list
+from .common import vlan_rows
 
 ALL_CAPABILITIES = {"vlans", "access", "trunk", "svi", "routed_if", "dhcp", "nat", "static", "ospf", "eigrp",
                     "bgp", "ssh", "default_gateway"}
@@ -543,6 +544,13 @@ class CiscoIos:
 
     def parse_facts(self, outputs: dict[str, str]) -> dict:
         return parse_show_version(outputs.get("show version", ""))
+
+    def vlan_commands(self) -> list[str]:
+        return ["show vlan brief"] if self.model.category in ("switch", "l3switch") else []
+
+    def parse_vlans(self, outputs: dict[str, str]) -> list[dict]:
+        return vlan_rows(outputs.get("show vlan brief", ""),
+                         r"^(?P<id>\d+)\s+(?P<name>\S+)\s+(?:active|act/\S+|suspended)")
 
     def neighbor_commands(self) -> list[str]:
         return ["show cdp neighbors detail", "show lldp neighbors detail"]

@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import __version__, errors
 from .api import audit as audit_api
-from .api import auth, catalog, devices, health, hostkeys, jobs, plans, templates, users
+from .api import auth, catalog, devices, health, hostkeys, jobs, overview, plans, templates, users
 from .config import Settings
 from .db import connect, ensure_indexes
 from .errors import ApiError
@@ -19,11 +19,12 @@ from .security.ratelimit import RateLimiter
 from .security.rbac import assert_all_routes_protected
 from .services.catalog import seed_if_empty
 from .services.jobs import JobRunner
+from .services.status import StatusPoller
 
 log = logging.getLogger("netconfig")
 
 ROUTERS = [health.router, auth.router, users.router, audit_api.router, catalog.router, devices.router, plans.router,
-           jobs.router, hostkeys.router, templates.router]
+           jobs.router, hostkeys.router, templates.router, overview.router]
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -40,11 +41,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Indexes, seed, crash recovery and the approval expiry sweep. If MongoDB is not up yet the app still
         # starts (/api/health reports "down") and these are retried in the background until it is.
         app.state.runner.start(prepare_db)
+        app.state.poller.start()
         if settings.simulate_devices:
             log.warning("SIMULATE_DEVICES=true: pushes go to simulated devices, not the network.")
         if settings.allow_remote:
             log.warning("ALLOW_REMOTE=true: NetConfig Studio is reachable from the network. Use HTTPS.")
         yield
+        app.state.poller.shutdown()
         app.state.runner.shutdown()
         app.state.mongo.close()
 
@@ -62,6 +65,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.db = app.state.mongo[settings.mongo_db]
     app.state.login_limiter = RateLimiter(settings.login_rate_per_minute, 60)
     app.state.runner = JobRunner(app.state.db, settings)
+    app.state.poller = StatusPoller(app.state.db, settings.status_poll_seconds, settings.simulate_devices)
 
     errors.install(app)
     assert_all_routes_protected(ROUTERS)

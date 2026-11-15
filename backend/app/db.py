@@ -64,4 +64,5 @@ def ensure_indexes(db: Database) -> None:
 
     db.host_keys.create_index([("host", ASCENDING), ("port", ASCENDING)], unique=True)
     db.templates.create_index([("name", ASCENDING)], unique=True, collation=ci)
+    db.status_samples.create_index([("at", ASCENDING)], expireAfterSeconds=14 * 24 * 3600)
     log.info("MongoDB indexes ensured on %s", db.name)

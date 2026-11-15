@@ -15,7 +15,7 @@ from ..models.plan import ConfigPlan
 from ..security.masking import MASK
 from .base import Check, Kind, ModelInfo, Session, UnsupportedFeature, vlan_list
 from .cisco_ios import parse_running_config
-from .common import dhcp_range, first, logical, normalize_by_types, section_checks
+from .common import dhcp_range, first, logical, normalize_by_types, section_checks, vlan_rows
 
 CAPABILITIES = {"vlans", "access", "trunk", "svi", "routed_if", "dhcp", "static", "ospf", "bgp", "ssh",
                 "default_gateway"}  # no NAT and no EIGRP on AOS-CX switches
@@ -296,6 +296,12 @@ class ArubaAoscx:
         s = outputs.get("show system", "")
         return {"model": first(r"^Product Name\s*:\s*(.+)$", s), "version": first(r"^AOS-CX Version\s*:\s*(\S+)", s),
                 "serial": first(r"^Chassis Serial Nbr\s*:\s*(\S+)", s), "hostname": first(r"^Hostname\s*:\s*(\S+)", s)}
+
+    def vlan_commands(self) -> list[str]:
+        return ["show vlan"]
+
+    def parse_vlans(self, outputs: dict[str, str]) -> list[dict]:
+        return vlan_rows(outputs.get("show vlan", ""), r"^(?P<id>\d+)\s+(?P<name>\S+)\s+(?:up|down)\b")
 
     def neighbor_commands(self) -> list[str]:
         return ["show lldp neighbor-info detail"]

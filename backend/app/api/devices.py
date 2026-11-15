@@ -9,11 +9,11 @@ from pymongo.errors import DuplicateKeyError
 from .. import clock
 from ..errors import ApiError, field_path
 from ..models.common import oid
-from ..models.device import PRODUCTION_TAG, DeviceCreate, DeviceOut, DeviceUpdate, OnvifRequest
+from ..models.device import PRODUCTION_TAG, DeviceCreate, DeviceOut, DeviceUpdate, DiscoverRequest, OnvifRequest
 from ..security.ratelimit import RateLimiter
 from ..security.rbac import RANK, require_admin, require_engineer, require_viewer
 from ..security.sessions import SessionUser
-from ..services import audit, onvif
+from ..services import audit, discovery, onvif
 from ..services.catalog import effective_capabilities
 from .deps import get_db, rid
 
@@ -21,6 +21,7 @@ router = APIRouter(prefix="/api/devices", tags=["devices"])
 CI = Collation(locale="en", strength=2)
 UPLINK_CATEGORIES = ("ap", "camera")
 onvif_limit = RateLimiter(limit=10, window_seconds=60)
+discover_limit = RateLimiter(limit=10, window_seconds=60)
 
 
 def _device_out(db: Database, doc: dict, cache: dict | None = None) -> DeviceOut:
@@ -43,8 +44,8 @@ def _device_out(db: Database, doc: dict, cache: dict | None = None) -> DeviceOut
         capabilities=effective_capabilities(driver, model), mgmt_ip=doc.get("mgmt_ip"),
         connection=doc.get("connection", {}), location=doc.get("location", ""), tags=doc.get("tags", []),
         production=PRODUCTION_TAG in doc.get("tags", []), status=doc.get("status", {}),
-        uplink=doc.get("uplink"), facts=doc.get("facts"), created_at=doc.get("created_at"),
-        updated_at=doc.get("updated_at"),
+        uplink=doc.get("uplink"), facts=doc.get("facts"), neighbors=doc.get("neighbors"), vlans=doc.get("vlans"),
+        created_at=doc.get("created_at"), updated_at=doc.get("updated_at"),
     )
 
 
@@ -199,6 +200,38 @@ def delete_device(device_id: str, request: Request, user: SessionUser = Depends(
     audit.record(db, "device.delete", who=user, target={"type": "device", "id": device_id},
                  details={"name": doc["name"]}, request_id=rid(request))
     return {"ok": True}
+
+
+@router.post("/{device_id}/discover")
+def discover_device(device_id: str, body: DiscoverRequest, request: Request,
+                    user: SessionUser = Depends(require_engineer), db: Database = Depends(get_db)) -> DeviceOut:
+    """Read facts, neighbours and VLANs with read-only show commands. The login is used for this request only."""
+    doc = db.devices.find_one({"_id": oid(device_id)})
+    if not doc:
+        raise ApiError(404, "Device not found.")
+    if not discover_limit.allow(user.user_id):
+        raise ApiError(429, "Too many device reads; wait a minute.")
+    runner = request.app.state.runner
+    lock = runner.device_locks[str(doc["_id"])]
+    if not lock.acquire(blocking=False):
+        raise ApiError(409, "A job is running on this device; read its facts when it has finished.")
+    target = {"type": "device", "id": device_id}
+    login = discovery.Login(body.username, body.password, body.enable_secret)
+    try:
+        found = discovery.discover(db, runner.connector, request.app.state.settings, doc, login, who=user)
+    except discovery.DiscoveryError as exc:
+        audit.record(db, "device.discover", who=user, target=target, result="failed", details={"error": str(exc)},
+                     request_id=rid(request))
+        raise ApiError(exc.status, str(exc)) from exc
+    finally:
+        lock.release()
+        del login
+    notes = found.pop("notes")
+    db.devices.update_one({"_id": doc["_id"]}, {"$set": found})
+    audit.record(db, "device.discover", who=user, target=target, request_id=rid(request),
+                 details={"model_match": found["facts"]["match"]["status"], "neighbors": len(found["neighbors"]),
+                          "notes": notes[:3]})
+    return _device_out(db, db.devices.find_one({"_id": doc["_id"]}))
 
 
 @router.post("/{device_id}/onvif")

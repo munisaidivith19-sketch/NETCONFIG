@@ -11,6 +11,7 @@ import HostKeys from './pages/admin/HostKeys.jsx'
 import Audit from './pages/admin/Audit.jsx'
 import Users from './pages/admin/Users.jsx'
 import Login from './pages/Login.jsx'
+import Overview from './pages/Overview.jsx'
 import Placeholder from './pages/Placeholder.jsx'
 import RouterLink from './pages/RouterLink.jsx'
 
@@ -25,7 +26,7 @@ export default function App() {
           </RequireAuth>
         }
       >
-        <Route index element={<Placeholder title="Overview" phase="Phase 4B" />} />
+        <Route index element={<Overview />} />
         <Route path="devices" element={<Devices />} />
         <Route path="catalog" element={<Catalog />} />
         <Route

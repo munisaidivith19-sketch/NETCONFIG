@@ -57,6 +57,24 @@ Add a device (for example model *Cisco IOSvL2*, management IP `10.0.0.2`), then 
 Create job → enter any username and password (the password `wrong` simulates a login failure) → Run.
 Real testing uses GNS3 / CML: follow `docs/LAB_TESTING.md`.
 
+## Live overview (Phase 4B)
+The **Overview** page is the home page. Everything on it comes from the backend (`GET /api/overview`):
+- **Status check:** every `STATUS_POLL_SECONDS` (default 60, `0` turns it off) a background thread checks each
+  device with a TCP connection to its SSH (or lab Telnet) port, or a ping when the device has no CLI port
+  (access points, cameras). Results go to `devices.status` and a 14-day `status_samples` history.
+  Engineers can press **Check status now**.
+- **Read device facts:** select a device on the map and enter a device login. The app connects once (same host-key
+  pinning as a push), runs only `show` commands, and stores the parsed model, version, serial, LLDP/CDP neighbours
+  and VLAN table. The login is used once and never stored. If the device reports a different OS or model than the
+  inventory says, a warning appears, because commands generated for the wrong OS would be wrong.
+- **Map:** routers at the top, then Layer 3 switches, switches, and access points / cameras. Links come from
+  LLDP/CDP and from access point uplinks. Neighbours not in the inventory are shown with a dashed border.
+  Use the arrow keys to move between devices and Enter to select one.
+- **Charts:** changes per day (14 days, succeeded vs failed or rolled back), reachable devices (24 h) and devices
+  by category. Each chart has a **Show as table** button with the same numbers.
+
+SNMPv3 polling is **not** built yet: it needs a new library (`pysnmp`), which needs the author's approval first.
+
 ## More than one device (Configure tabs)
 - **Several switches** (Configure → Device change → *Several switches*): the same VLANs and port settings
   pushed to 2–20 switches one after another; by default it stops at the first switch that fails.
@@ -140,5 +158,7 @@ scripts/   Windows helper scripts
 | 3 | 3A safe push engine, approvals, live progress, History, SSH host keys | done |
 | 3 | 3B console bootstrap, router link wizard, multi-device, templates | done (lab checklist in `docs/LAB_TESTING.md` not run yet) |
 | 3 | 3C review (code review, simplify, security review) | done |
-| 4 | Multi-vendor drivers, live dashboard, UI polish | – |
+| 4 | 4A Arista, Juniper, Aruba drivers; experimental MikroTik, Huawei, D-Link, TP-Link; APs and cameras | done (all drivers experimental until `docs/LAB_TESTING.md` Part B passes) |
+| 4 | 4B status polling, read-only discovery, topology, live Overview | done (SNMPv3 not built: needs approval for `pysnmp`) |
+| 4 | 4C UI quality pass, 4D review | – |
 | 5 | AI assistant, hardening, docs, release | – |
