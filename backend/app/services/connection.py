@@ -56,6 +56,11 @@ class HostKey:
         return "SHA256:" + base64.b64encode(digest).decode().rstrip("=")
 
 
+def default_port(method: str | None) -> int:
+    """SSH on 22; lab Telnet consoles on 23 unless the device record names a port."""
+    return 23 if method == "telnet_lab" else 22
+
+
 @dataclass
 class ConnectParams:
     method: str  # ssh | telnet_lab | serial

@@ -88,7 +88,10 @@ describe('Push and verify', () => {
     fireEvent.click(await screen.findByRole('button', { name: /lab-sw1/ }))
     fireEvent.click((await screen.findAllByRole('button', { name: 'Preview commands' }))[0])
     fireEvent.click(await screen.findByRole('button', { name: /Continue/ }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Create job' }))
+    // Step 4 of the step bar is also called "Create job": pick the action button, not the step.
+    const steps = screen.getByRole('navigation', { name: 'Configuration steps' })
+    const [create] = (await screen.findAllByRole('button', { name: 'Create job' })).filter((b) => !steps.contains(b))
+    fireEvent.click(create)
 
     // The job was created without any credential.
     const created = calls.find((c) => c.key === 'POST /api/jobs').body

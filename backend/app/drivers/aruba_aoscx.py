@@ -12,10 +12,18 @@ import ipaddress
 import re
 
 from ..models.plan import ConfigPlan
-from ..security.masking import MASK
-from .base import Check, Kind, ModelInfo, Session, UnsupportedFeature, vlan_list
+from .base import Check, Kind, ModelInfo, Session, vlan_list
 from .cisco_ios import parse_running_config
-from .common import dhcp_range, first, logical, normalize_by_types, section_checks, vlan_rows
+from .common import (
+    DriverDefaults,
+    dhcp_range,
+    first,
+    logical,
+    normalize_by_types,
+    secret_value,
+    section_checks,
+    vlan_rows,
+)
 
 CAPABILITIES = {"vlans", "access", "trunk", "svi", "routed_if", "dhcp", "static", "ospf", "bgp", "ssh",
                 "default_gateway"}  # no NAT and no EIGRP on AOS-CX switches
@@ -25,7 +33,7 @@ MAX_TIMER = 60  # checkpoint auto: 1-60 minutes
 IND = "    "
 
 
-class ArubaAoscx:
+class ArubaAoscx(DriverDefaults):
     os_id = "aruba_aoscx"
     os_name = "Aruba AOS-CX"
     netmiko_device_type = "aruba_aoscx"
@@ -94,9 +102,7 @@ class ArubaAoscx:
 
     # ------------------------------------------------------------ generate
     def generate(self, plan: ConfigPlan, kind: Kind) -> list[str]:
-        for feature in plan.features():
-            if feature not in self.capabilities:
-                raise UnsupportedFeature(feature, self.os_name)
+        self._check_features(plan)
         out: list[str] = []
         if plan.basic:
             out.append(f"hostname {plan.basic.hostname}")
@@ -106,12 +112,7 @@ class ArubaAoscx:
             out.append("no https-server vrf default")
         if plan.ssh:
             s = plan.ssh
-            if kind == "preview":
-                pw = MASK
-            elif s.password is None:
-                raise ValueError("ssh.password is required to push this plan")
-            else:
-                pw = s.password.get_secret_value()
+            pw = secret_value(s.password, kind)
             out += [f"user {s.username} group administrators password plaintext {pw}", "ssh server vrf default",
                     "cli-session", f"{IND}timeout {s.vty_timeout_minutes}"]
         for v in plan.vlans:
@@ -270,23 +271,11 @@ class ArubaAoscx:
     def backup_command(self) -> str:
         return "show running-config"
 
-    def config_dump_commands(self) -> set[str]:
-        return {"show running-config"}
-
     def management_commands(self) -> list[str]:
         return ["show running-config"]
 
-    def precheck_commands(self, plan: ConfigPlan) -> list[str]:
-        return []
-
-    def adapt_commands(self, plan, commands, outputs):
-        return commands, []
-
     def prompts(self, command: str) -> list[tuple[str, str]] | None:
         return None
-
-    def rollback_setup(self, running_config: str) -> list[str]:
-        return []
 
     # ------------------------------------------------------------ discovery
     def facts_commands(self) -> list[str]:

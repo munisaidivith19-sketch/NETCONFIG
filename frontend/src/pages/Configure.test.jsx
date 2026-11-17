@@ -74,6 +74,26 @@ describe('Configure wizard', () => {
     expect(JSON.stringify(sent)).not.toMatch(/password/i)
   })
 
+  it('moves focus to the new step heading so keyboard users are not dropped at the top', async () => {
+    respond({
+      ...BASE,
+      'POST /api/plans/preview': [200, {
+        ok: true, errors: {}, warnings: [], unsupported: [], commands: ['vlan 10'], verify_commands: [],
+        commands_hash: 'b'.repeat(64), driver: { name: 'Cisco IOS / IOS-XE' }, rollback: 'revert_timer', revert_minutes: 10,
+        save_command: 'write memory', production: false,
+      }],
+    })
+    renderAt('/configure')
+    fireEvent.click(await screen.findByRole('button', { name: /lab-sw1/ }))
+    const requirements = await screen.findByRole('heading', { name: 'Requirements' })
+    expect(document.activeElement).toBe(requirements)
+    const steps = screen.getByRole('navigation', { name: 'Configuration steps' })
+    expect(within(steps).getByRole('button', { name: /Requirements/ }).getAttribute('aria-current')).toBe('step')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Preview commands' })[0])
+    const commands = await screen.findByRole('heading', { name: 'Commands' })
+    expect(document.activeElement).toBe(commands) // after the loading panel was replaced
+  })
+
   it('shows field errors from the backend next to the field', async () => {
     respond({
       ...BASE,

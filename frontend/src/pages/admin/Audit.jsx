@@ -77,7 +77,7 @@ export default function Audit() {
         {!data ? (
           <SkeletonRows rows={6} />
         ) : data.items.length === 0 ? (
-          <Empty icon={ScrollText} title="Nothing recorded for these filters" />
+          <Empty icon={ScrollText} title="Nothing recorded for these filters">Change or clear the filters to see more entries.</Empty>
         ) : (
           <>
             <div className="table-wrap">
@@ -106,7 +106,7 @@ export default function Audit() {
                 </tbody>
               </table>
             </div>
-            <div className="row between" style={{ marginTop: 16 }}>
+            <div className="row between" style={{ marginTop: 'var(--space-4)' }}>
               <span className="faint">{data.total} entries · page {page} of {pages}</span>
               <div className="row">
                 <button className="btn small" type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</button>

@@ -2,13 +2,13 @@
 generate(), check() and the parsers; this base gives the review rules and the push hooks they have in common."""
 
 from ...models.plan import ConfigPlan
-from ...security.masking import MASK
-from ..base import Kind, ModelInfo, Session, UnsupportedFeature
+from ..base import Kind, ModelInfo, Session
+from ..common import DriverDefaults, secret_value
 
 CAPABILITIES = {"vlans", "access", "trunk", "ssh"}
 
 
-class ExperimentalDriver:
+class ExperimentalDriver(DriverDefaults):
     os_id = ""
     os_name = ""
     netmiko_device_type = ""
@@ -83,18 +83,9 @@ class ExperimentalDriver:
     def _review(self, plan: ConfigPlan, errors: dict[str, str], notes: list[str]) -> None:
         """OS-specific rules."""
 
-    def _check_features(self, plan: ConfigPlan) -> None:
-        for feature in plan.features():
-            if feature not in self.capabilities:
-                raise UnsupportedFeature(feature, self.os_name)
-
     @staticmethod
     def _secret(plan: ConfigPlan, kind: Kind) -> str:
-        if kind == "preview":
-            return MASK
-        if plan.ssh is None or plan.ssh.password is None:
-            raise ValueError("ssh.password is required to push this plan")
-        return plan.ssh.password.get_secret_value()
+        return secret_value(plan.ssh.password if plan.ssh else None, kind)
 
     # -------------------------------------------------------- push support
     def session(self, plan: ConfigPlan, name: str) -> Session:
@@ -108,18 +99,6 @@ class ExperimentalDriver:
 
     def prompts(self, command: str) -> list[tuple[str, str]] | None:
         return None
-
-    def config_dump_commands(self) -> set[str]:
-        return {self.backup_command()}
-
-    def precheck_commands(self, plan: ConfigPlan) -> list[str]:
-        return []
-
-    def adapt_commands(self, plan, commands, outputs):
-        return commands, []
-
-    def rollback_setup(self, running_config: str) -> list[str]:
-        return []
 
     def vlan_commands(self) -> list[str]:
         return []  # VLAN tables are read only by the built-in drivers

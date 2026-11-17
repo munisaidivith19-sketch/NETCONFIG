@@ -101,3 +101,14 @@ def test_onvif_only_for_cameras_and_errors_are_safe(client_for, monkeypatch):
     monkeypatch.setattr(onvif, "get_device_information", refused)
     r = eng.post(f"/api/devices/{cam['id']}/onvif", json=body)
     assert r.status_code == 502 and "refused the login" in r.json()["error"]["message"]
+
+
+def test_deleting_a_switch_clears_the_uplinks_that_point_at_it(client_for, db):
+    """Phase 4D review: a stale uplink made every later edit of the AP fail with 'not a switch'."""
+    eng, admin = client_for("engineer"), client_for("admin")
+    sw = add(eng, "sw1", "cisco-iosvl2", "10.0.0.2").json()
+    ap = add(eng, "ap1", "cisco-c9120axi", uplink={"device_id": sw["id"], "interface": "GigabitEthernet0/1"}).json()
+    assert admin.delete(f"/api/devices/{sw['id']}").status_code == 200
+    assert eng.get(f"/api/devices/{ap['id']}").json().get("uplink") is None
+    entry = db.audit_log.find_one({"action": "device.delete"})
+    assert entry["details"]["uplinks_cleared"] == 1

@@ -7,9 +7,8 @@ import ipaddress
 import re
 
 from ..models.plan import ConfigPlan
-from ..security.masking import MASK
-from .base import Check, Kind, ModelInfo, Session, UnsupportedFeature, expand_vlan_list, vlan_list
-from .common import vlan_rows
+from .base import Check, Kind, ModelInfo, Session, expand_vlan_list, vlan_list
+from .common import DriverDefaults, secret_value, vlan_rows
 
 ALL_CAPABILITIES = {"vlans", "access", "trunk", "svi", "routed_if", "dhcp", "nat", "static", "ospf", "eigrp",
                     "bgp", "ssh", "default_gateway"}
@@ -55,7 +54,7 @@ def _addr(cidr: str) -> tuple[str, str]:
     return str(iface.ip), str(iface.netmask)
 
 
-class CiscoIos:
+class CiscoIos(DriverDefaults):
     os_id = "cisco_ios"
     os_name = "Cisco IOS / IOS-XE"
     netmiko_device_type = "cisco_ios"
@@ -86,9 +85,7 @@ class CiscoIos:
 
     # ------------------------------------------------------------- generate
     def generate(self, plan: ConfigPlan, kind: Kind) -> list[str]:
-        for feature in plan.features():
-            if feature not in self.capabilities:
-                raise UnsupportedFeature(feature, self.os_name)
+        self._check_features(plan)
         out: list[str] = []
         self._basic(plan, out)
         self._hardening(plan, out)
@@ -151,16 +148,9 @@ class CiscoIos:
         if not s:
             return
 
-        def secret(value, what: str) -> str:
-            if kind == "preview":
-                return MASK
-            if value is None:
-                raise ValueError(f"{what} is required to push this plan")
-            return value.get_secret_value()
-
-        out.append(f"username {s.username} privilege 15 secret {secret(s.password, 'ssh.password')}")
+        out.append(f"username {s.username} privilege 15 secret {secret_value(s.password, kind)}")
         if s.set_enable_secret:
-            out.append(f"enable secret {secret(s.enable_secret, 'ssh.enable_secret')}")
+            out.append(f"enable secret {secret_value(s.enable_secret, kind, 'ssh.enable_secret')}")
         # adapt_commands() drops this line at push time when SSH is already enabled (a usable key exists) and
         # regenerate_keys is not set; prompts() answers the replace prompt.
         out.append(f"crypto key generate rsa modulus {s.rsa_modulus}")
@@ -506,9 +496,6 @@ class CiscoIos:
 
     def backup_command(self) -> str:
         return "show running-config"
-
-    def config_dump_commands(self) -> set[str]:
-        return {"show running-config"}
 
     def management_commands(self) -> list[str]:
         return ["show ip interface brief"]

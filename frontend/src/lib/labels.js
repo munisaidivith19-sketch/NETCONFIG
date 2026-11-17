@@ -1,6 +1,10 @@
 // Human-readable labels shared by several pages.
 import { Camera, Network, Radio, Router, Server, ToggleRight } from 'lucide-react'
 
+// One wording for every Telnet warning (Devices, device form, first-time setup, run form).
+export const TELNET_WARNING =
+  'Telnet sends the login and every command in clear text. Use it only for emulator consoles on 127.0.0.1 or a private (RFC 1918) lab network.'
+
 export const CATEGORIES = [
   { id: 'switch', label: 'Switch', icon: ToggleRight, hint: 'Layer 2 access switch' },
   { id: 'l3switch', label: 'Layer 3 switch', icon: Network, hint: 'Switching + routing (SVIs)' },

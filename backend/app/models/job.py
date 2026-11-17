@@ -10,6 +10,8 @@ from .wizards import BootstrapSpec, LinkSpec
 
 RUNNING = ("queued", "connecting", "backing_up", "checking", "applying", "verifying", "saving", "rolling_back")
 TERMINAL = ("success", "failed", "rolled_back", "blocked", "cancelled", "expired")
+FAILED = ("failed", "rolled_back", "blocked")  # ended without the change in place (in order of severity)
+WAITING = ("awaiting_approval", "ready")
 STATUSES = ("awaiting_approval", "ready", *RUNNING, *TERMINAL)
 CANCELLABLE = ("awaiting_approval", "ready", "queued", "connecting", "backing_up", "checking")
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Boxes, CheckCircle2, ClipboardCheck, KeyRound, Layers, Server, ShieldCheck } from 'lucide-react'
 import CodeBlock from '../components/CodeBlock.jsx'
@@ -11,6 +11,7 @@ import { get, post } from '../lib/api.js'
 import { useJob } from '../lib/useJob.js'
 import { SUPPORT, categoryIcon, categoryLabel } from '../lib/labels.js'
 import { NEW_ROWS, emptyForm, normalizeErrors, sectionOf, toPlan } from '../lib/plan.js'
+import { reveal } from '../lib/scroll.js'
 
 const SWITCHES = ['switch', 'l3switch']
 const MAX_SWITCHES = 20
@@ -22,15 +23,21 @@ function multiErrors(errors) {
   return out
 }
 
-const STEPS = ['Device', 'Requirements', 'Preview', 'Approval', 'Push & verify']
+const TARGET_TYPES = [
+  { id: 'device', label: 'Inventory device', icon: Server },
+  { id: 'multi', label: 'Several switches', icon: Layers },
+  { id: 'model', label: 'Catalog model (preview only)', icon: Boxes },
+]
+
+const STEPS = ['Device', 'Requirements', 'Preview', 'Create job', 'Push & verify']
 
 function Steps({ step, setStep, allowed }) {
   return (
     <nav aria-label="Configuration steps">
       <ol className="steps glass">
         {STEPS.map((label, i) => (
-          <li key={label} aria-current={i === step ? 'step' : undefined} className={i < step ? 'done' : undefined}>
-            <button type="button" onClick={() => setStep(i)} disabled={!allowed(i)}>
+          <li key={label} className={i < step ? 'done' : undefined}>
+            <button type="button" onClick={() => setStep(i)} disabled={!allowed(i)} aria-current={i === step ? 'step' : undefined}>
               <span className="num" aria-hidden="true">{i + 1}</span>
               <span className="step-label">{label}</span>
             </button>
@@ -79,7 +86,7 @@ function MultiPicker({ devices, target, setTarget, setError }) {
             <Server size={22} aria-hidden="true" />
             <strong>{d.name}</strong>
             <small>{d.model_name || d.model_id} · {d.mgmt_ip || 'no IP'}</small>
-            {d.production && <Badge tone="danger">production</Badge>}
+            {d.production && <Badge tone="warning">production</Badge>}
           </button>
         ))}
       </div>
@@ -132,16 +139,13 @@ function DeviceStep({ target, setTarget }) {
   const list = mode === 'model' ? models : devices
   return (
     <Panel title="Choose the target" subtitle="An inventory device, several switches at once, or just a catalog model to see the commands it would get.">
-      <div className="row" role="group" aria-label="Target type" style={{ marginBottom: 'var(--space-4)' }}>
-        <button type="button" className={`btn ${mode === 'device' ? 'primary' : ''}`} aria-pressed={mode === 'device'} onClick={() => setMode('device')}>
-          <Server size={18} aria-hidden="true" /> Inventory device
-        </button>
-        <button type="button" className={`btn ${mode === 'multi' ? 'primary' : ''}`} aria-pressed={mode === 'multi'} onClick={() => setMode('multi')}>
-          <Layers size={18} aria-hidden="true" /> Several switches
-        </button>
-        <button type="button" className={`btn ${mode === 'model' ? 'primary' : ''}`} aria-pressed={mode === 'model'} onClick={() => setMode('model')}>
-          <Boxes size={18} aria-hidden="true" /> Catalog model (preview only)
-        </button>
+      {/* A segmented control, not three primary buttons: the only primary action on this step is picking a target. */}
+      <div className="segmented" role="group" aria-label="Target type">
+        {TARGET_TYPES.map(({ id, label, icon: Icon }) => (
+          <button type="button" key={id} className="subnav-link" aria-pressed={mode === id} onClick={() => setMode(id)}>
+            <Icon size={18} aria-hidden="true" /> {label}
+          </button>
+        ))}
       </div>
       <ErrorNote error={error} />
       {!list && !error && <SkeletonRows rows={3} />}
@@ -166,7 +170,7 @@ function DeviceStep({ target, setTarget }) {
                   {mode === 'device' ? `${item.model_name || item.model_id} · ${item.mgmt_ip || 'no IP'}` : `${item.brand || ''} · ${categoryLabel(item.category)}`}
                 </small>
                 <span className="row">
-                  {mode === 'device' && item.production && <Badge tone="danger">production</Badge>}
+                  {mode === 'device' && item.production && <Badge tone="warning">production</Badge>}
                   {support && <Badge tone={support.tone}>{support.label}</Badge>}
                 </span>
               </button>
@@ -331,7 +335,7 @@ export default function Configure() {
 
   function goFix(path) {
     setStep(1)
-    requestAnimationFrame(() => document.getElementById(`sec-${sectionOf(path)}`)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }))
+    requestAnimationFrame(() => reveal(document.getElementById(`sec-${sectionOf(path)}`)))
   }
 
   const updateForm = (fn) => {
@@ -339,6 +343,22 @@ export default function Configure() {
     if (preview?.ok) setPreview(null) // the preview no longer matches the form
     if (job && !started) resetJob() // a job not yet run belongs to the old plan; History still has it
   }
+
+  // Focus management between steps: the button that was clicked usually disappears with the old step, which
+  // would drop keyboard and screen-reader users at the top of the page. Move focus to the new step's first
+  // heading instead (also once the preview has loaded, because the loading panel is replaced).
+  const stepBox = useRef(null)
+  const shownStep = useRef(step)
+  useEffect(() => {
+    const changed = shownStep.current !== step
+    shownStep.current = step
+    const lost = !document.activeElement || document.activeElement === document.body
+    if (!changed && !lost) return
+    const heading = stepBox.current?.querySelector('h2')
+    if (!heading) return
+    heading.tabIndex = -1
+    heading.focus()
+  }, [step, loading, job?.id])
 
   const pushable = target?.kind === 'device' || target?.kind === 'multi'
   const allowed = (i) =>
@@ -350,7 +370,7 @@ export default function Configure() {
         {target && (
           <span className="row">
             <Badge tone="info">{target.kind === 'multi' ? target.names.join(', ') : target.name}</Badge>
-            {target.production && <Badge tone="danger">production</Badge>}
+            {target.production && <Badge tone="warning">production</Badge>}
             {SUPPORT[target.support] && <Badge tone={SUPPORT[target.support].tone}>{SUPPORT[target.support].label}</Badge>}
           </span>
         )}
@@ -358,50 +378,52 @@ export default function Configure() {
       <div className="stack">
         <ConfigureTabs />
         <Steps step={step} setStep={(i) => (i === 2 ? runPreview() : setStep(i))} allowed={allowed} />
+        <div className="stack" ref={stepBox}>
 
-        {step === 0 && <DeviceStep target={target} setTarget={chooseTarget} />}
+          {step === 0 && <DeviceStep target={target} setTarget={chooseTarget} />}
 
-        {step === 1 && target && (
-          <Panel title="Requirements" subtitle={`${target.model.name} · ${target.os || 'no driver'}`}
-            actions={<button type="button" className="btn primary" onClick={runPreview}>Preview commands</button>}>
-            {target.support === 'experimental' && (
-              <Alert tone="warning">The {target.os} driver is experimental: check the preview carefully and test in a lab first.</Alert>
-            )}
-            {Object.keys(errors).length > 0 && <Alert tone="danger">Some fields need attention; they are marked below.</Alert>}
-            <TemplateBar form={form} setForm={updateForm} osId={target.model.os_driver?.id || target.model.os_id} />
-            <PlanForm form={form} setForm={updateForm} caps={target.capabilities} errors={errors} production={target.production} portHint={portHint}
-              category={target.kind === 'multi' ? null : target.model.category} />
-            <div className="form-actions">
-              <button type="button" className="btn" onClick={() => setStep(0)}>Back</button>
-              <button type="button" className="btn primary" onClick={runPreview}>Preview commands</button>
-            </div>
-          </Panel>
-        )}
+          {step === 1 && target && (
+            <Panel title="Requirements" subtitle={`${target.model.name} · ${target.os || 'no driver'}`}
+              actions={<button type="button" className="btn primary" onClick={runPreview}>Preview commands</button>}>
+              {target.support === 'experimental' && (
+                <Alert tone="warning">The {target.os} driver is experimental: check the preview carefully and test in a lab first.</Alert>
+              )}
+              {Object.keys(errors).length > 0 && <Alert tone="danger">Some fields need attention; they are marked below.</Alert>}
+              <TemplateBar form={form} setForm={updateForm} osId={target.model.os_driver?.id || target.model.os_id} />
+              <PlanForm form={form} setForm={updateForm} caps={target.capabilities} errors={errors} production={target.production} portHint={portHint}
+                category={target.kind === 'multi' ? null : target.model.category} />
+              <div className="form-actions">
+                <button type="button" className="btn" onClick={() => setStep(0)}>Back</button>
+                <button type="button" className="btn primary" onClick={runPreview}>Preview commands</button>
+              </div>
+            </Panel>
+          )}
 
-        {step === 2 && (
-          <>
-            <PreviewStep preview={preview} multi={target?.kind === 'multi'} error={previewError} loading={loading} onRetry={runPreview} goFix={goFix} />
-            <div className="form-actions">
-              <button type="button" className="btn" onClick={() => setStep(1)}>Edit requirements</button>
-              <button type="button" className="btn primary" disabled={!preview?.ok || !pushable} onClick={() => setStep(3)}>
-                <CheckCircle2 size={18} aria-hidden="true" /> Continue
-              </button>
-            </div>
-            {preview?.ok && target?.kind === 'model' && (
-              <Alert tone="info">This was a catalog preview. Add the device to the inventory to push it.</Alert>
-            )}
-          </>
-        )}
+          {step === 2 && (
+            <>
+              <PreviewStep preview={preview} multi={target?.kind === 'multi'} error={previewError} loading={loading} onRetry={runPreview} goFix={goFix} />
+              <div className="form-actions">
+                <button type="button" className="btn" onClick={() => setStep(1)}>Edit requirements</button>
+                <button type="button" className="btn primary" disabled={!preview?.ok || !pushable} onClick={() => setStep(3)}>
+                  <CheckCircle2 size={18} aria-hidden="true" /> Continue to create the job
+                </button>
+              </div>
+              {preview?.ok && target?.kind === 'model' && (
+                <Alert tone="info">This was a catalog preview. Add the device to the inventory to push it.</Alert>
+              )}
+            </>
+          )}
 
-        {step === 3 && target && (job ? (
-          <JobView job={job} setJob={setJob} />
-        ) : (
-          <CreateChange target={target} plan={toPlan(form)} onCreated={(j) => { setJob(j); setJobId(j.id) }} />
-        ))}
-        {step === 4 && job && (
-          <FinishedJob job={job} setJob={setJob} onAgain={() => { resetJob(); setPreview(null); setStep(1) }}
-            again={target?.kind === 'multi' ? 'New change for these switches' : 'New change for this device'} />
-        )}
+          {step === 3 && target && (job ? (
+            <JobView job={job} setJob={setJob} />
+          ) : (
+            <CreateChange target={target} plan={toPlan(form)} onCreated={(j) => { setJob(j); setJobId(j.id) }} />
+          ))}
+          {step === 4 && job && (
+            <FinishedJob job={job} setJob={setJob} onAgain={() => { resetJob(); setPreview(null); setStep(1) }}
+              again={target?.kind === 'multi' ? 'New change for these switches' : 'New change for this device'} />
+          )}
+        </div>
       </div>
     </>
   )

@@ -124,7 +124,7 @@ export default function Catalog() {
 
         <Panel title={detail ? detail.name : 'Model details'} subtitle={detail ? `${detail.brand} · ${detail.series}` : 'Select a model to see its driver and capabilities.'}>
           {!selected ? (
-            <Empty icon={BookOpen} title="No model selected" />
+            <Empty icon={BookOpen} title="No model selected">Select a model to see its ports, OS driver and supported features.</Empty>
           ) : !detail ? (
             <SkeletonRows rows={5} />
           ) : (
@@ -183,10 +183,10 @@ function ModelDetail({ detail }) {
         {driver?.note && <div><dt className="faint">Note</dt><dd style={{ margin: 0 }}>{driver.note}</dd></div>}
       </dl>
       <div>
-        <h3 style={{ marginBottom: 8 }}>Capabilities</h3>
+        <h3 style={{ marginBottom: 'var(--space-2)' }}>Capabilities</h3>
         <ul className="choice-grid" style={{ listStyle: 'none', padding: 0, margin: 0, gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}>
           {CAPABILITIES.map(([id, label]) => (
-            <li key={id} className="row" style={{ gap: 6 }}>
+            <li key={id} className="row" style={{ gap: 'var(--space-2)' }}>
               {caps.has(id)
                 ? <Check size={16} aria-hidden="true" style={{ color: 'var(--success)' }} />
                 : <Minus size={16} aria-hidden="true" style={{ color: 'var(--text-faint)' }} />}

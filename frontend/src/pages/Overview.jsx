@@ -5,6 +5,7 @@ import { get, post } from '../lib/api.js'
 import { useAuth } from '../lib/auth.jsx'
 import { categoryLabel } from '../lib/labels.js'
 import { STATUS } from '../lib/jobs.js'
+import { reveal, stacked } from '../lib/scroll.js'
 import TopologyMap from '../components/TopologyMap.jsx'
 import { BarList, StackedColumns, TableToggle, TrendLine } from '../components/charts.jsx'
 import { Alert, Badge, Empty, ErrorNote, Field, PageHeader, Panel, Skeleton, SkeletonRows, formatDate } from '../components/ui.jsx'
@@ -59,7 +60,7 @@ function DiscoverForm({ device, onDone }) {
 
   return (
     <form className="stack" onSubmit={submit} noValidate>
-      <p className="faint" style={{ margin: 0 }}>
+      <p className="faint">
         Runs read-only <span className="mono">show</span> commands to read the model, software version, neighbours
         and VLANs. Nothing on the device is changed and the login is not stored.
       </p>
@@ -157,7 +158,7 @@ function DevicePanel({ id, onChanged }) {
       )}
 
       {can('engineer') && readable && <DiscoverForm key={device.id} device={device} onDone={(d) => { setDevice(d); onChanged() }} />}
-      {device.category === 'ap' && <p className="faint" style={{ margin: 0 }}>Managed by its wireless controller: open it under Devices to configure its switch port.</p>}
+      {device.category === 'ap' && <p className="faint">Managed by its wireless controller: open it under Devices to configure its switch port.</p>}
       <div className="row">
         <Link className="btn ghost small" to="/devices">Open in Devices</Link>
         {can('engineer') && device.support !== 'inventory' && <Link className="btn ghost small" to={`/configure?device=${device.id}`}>Configure</Link>}
@@ -170,30 +171,39 @@ export default function Overview() {
   const { can } = useAuth()
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
-  const [loading, setLoading] = useState(false)
+  const [checking, setChecking] = useState(false)
   const [selected, setSelected] = useState(null)
   const [notice, setNotice] = useState(null)
 
-  const load = useCallback(() => {
-    setLoading(true)
-    return get('/overview').then((d) => { setData(d); setError(null) }).catch(setError).finally(() => setLoading(false))
-  }, [])
+  // Background refresh keeps the current frame on screen (no flash, no skeleton) and only swaps the numbers.
+  const load = useCallback(() => get('/overview').then((d) => { setData(d); setError(null) }).catch(setError), [])
 
   useEffect(() => {
     load()
-    const t = setInterval(load, REFRESH_MS)
-    return () => clearInterval(t)
+    // No polling while the tab is hidden; coming back refreshes at once.
+    const t = setInterval(() => { if (!document.hidden) load() }, REFRESH_MS)
+    const onShow = () => { if (!document.hidden) load() }
+    document.addEventListener('visibilitychange', onShow)
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onShow) }
   }, [load])
 
   async function refresh() {
     setNotice(null)
+    setChecking(true)
     try {
       await post('/overview/refresh')
       setNotice('Checking every device now. The map updates in a few seconds.')
-      setTimeout(load, 5000)
+      setTimeout(() => load().finally(() => setChecking(false)), 5000)
     } catch (err) {
       setError(err)
+      setChecking(false)
     }
+  }
+
+  // On a phone the device panel sits below the map: bring it into view when a device is picked.
+  function select(id) {
+    setSelected(id)
+    if (stacked()) requestAnimationFrame(() => reveal(document.getElementById('device-panel')))
   }
 
   const k = data?.kpis
@@ -204,8 +214,8 @@ export default function Overview() {
     <>
       <PageHeader title="Overview" subtitle={data?.last_poll ? `Status checked ${formatDate(data.last_poll)}` : 'Live status of your network'}>
         {can('engineer') && (
-          <button type="button" className="btn" onClick={refresh}>
-            <RefreshCw size={16} aria-hidden="true" /> Check status now
+          <button type="button" className="btn" onClick={refresh} disabled={checking} aria-busy={checking}>
+            <RefreshCw size={16} aria-hidden="true" className={checking ? 'spin' : undefined} /> {checking ? 'Checking…' : 'Check status now'}
           </button>
         )}
       </PageHeader>
@@ -213,10 +223,10 @@ export default function Overview() {
       <ErrorNote error={error} />
 
       {!data ? <KpiSkeleton /> : (
-        <div className={`grid kpis ${loading ? 'refreshing' : ''}`}>
+        <div className="grid kpis">
           <Kpi icon={Server} label="Devices reachable" value={`${k.up} / ${k.devices}`}
             note={k.devices ? `${k.down} down · ${k.unknown} not checked` : 'No devices yet'} />
-          <Kpi icon={Activity} label="Changes in the last 7 days" value={k.jobs_7d}
+          <Kpi icon={Activity} label="Jobs in the last 7 days" value={k.jobs_7d}
             note={k.success_rate_7d == null ? 'None finished yet' : `${k.success_rate_7d}% succeeded · ${k.failed_7d} failed or rolled back`} />
           <Kpi icon={ClipboardCheck} label="Waiting" value={k.waiting}
             note={k.running ? `${k.running} running now` : 'For approval or to be run'} />
@@ -232,33 +242,35 @@ export default function Overview() {
               Add your switches and routers, then read their facts to draw the map.
             </Empty>
           ) : (
-            <div className={loading ? 'refreshing' : ''}>
-              <TopologyMap nodes={nodes} links={data.topology.links} selectedId={selected} onSelect={setSelected} />
+            <div className="stack">
+              <TopologyMap nodes={nodes} links={data.topology.links} selectedId={selected} onSelect={select} />
               {data.topology.links.length === 0 && (
-                <p className="faint" style={{ margin: 0 }}>No links yet: select a device and choose <strong>Read device facts</strong> to find its neighbours.</p>
+                <p className="faint">No links yet: select a device and choose <strong>Read device facts</strong> to find its neighbours.</p>
               )}
             </div>
           )}
         </Panel>
-        <Panel title="Device" subtitle={selected ? undefined : 'Select a device on the map.'}>
-          {selected ? <DevicePanel id={selected} onChanged={load} /> : <Empty icon={Server} title="No device selected" />}
+        <Panel title="Device" id="device-panel">
+          {selected ? <DevicePanel id={selected} onChanged={load} /> : (
+            <Empty icon={Server} title="No device selected">Select a device on the map to see its status, facts and VLANs.</Empty>
+          )}
         </Panel>
       </div>
 
       <div className="grid halves">
-        <Panel title="Changes per day" subtitle="Last 14 days, by result">
+        <Panel title="Jobs per day" subtitle="Last 14 days, by result">
           {!data ? <Skeleton height={180} /> : (
             <>
               <StackedColumns data={data.jobs_by_day} series={OUTCOMES} extra={[{ key: 'other', label: 'Other (waiting, cancelled, expired)' }]}
-                label="Changes per day over the last 14 days, succeeded and failed" />
-              <TableToggle caption="Changes per day" columns={['Day', 'Succeeded', 'Failed or rolled back', 'Other']}
+                label="Jobs per day over the last 14 days, succeeded and failed" />
+              <TableToggle caption="Jobs per day" columns={['Day', 'Succeeded', 'Failed or rolled back', 'Other']}
                 rows={data.jobs_by_day.map((d) => [d.date, d.success, d.failed, d.other])} />
             </>
           )}
         </Panel>
         <Panel title="Reachable devices" subtitle="Last 24 hours">
           {!data ? <Skeleton height={160} /> : data.status_history.length === 0 ? (
-            <Empty icon={Activity} title="No status checks yet">The status check runs every minute while NetConfig Studio is open.</Empty>
+            <Empty icon={Activity} title="No status checks yet">Device status is checked every minute while NetConfig Studio runs. The first results appear shortly after you add a device.</Empty>
           ) : (
             <>
               <TrendLine points={data.status_history.map((s) => ({ at: s.at, value: s.up }))} max={k.devices}
@@ -277,14 +289,14 @@ export default function Overview() {
               .sort((a, b) => b[1] - a[1]).map(([c, n]) => ({ label: categoryLabel(c), value: n }))} />
           )}
         </Panel>
-        <Panel title="Recent changes" actions={<Link className="btn ghost small" to="/history"><History size={14} aria-hidden="true" /> History</Link>}>
+        <Panel title="Recent jobs" actions={<Link className="btn ghost small" to="/history"><History size={14} aria-hidden="true" /> History</Link>}>
           {!data ? <SkeletonRows rows={3} /> : data.recent_jobs.length === 0 ? (
-            <Empty icon={History} title="No changes yet">Changes you preview and push appear here.</Empty>
+            <Empty icon={History} title="No jobs yet">A job is created when you push a change from Configure.</Empty>
           ) : (
             <ul className="recent-list">
               {data.recent_jobs.map((j) => (
                 <li key={j.id}>
-                  <Link to={`/history/${j.id}`}>{j.devices.join(', ') || 'Change'}</Link>
+                  <Link to={`/history/${j.id}`}>{j.devices.join(', ') || 'Job'}</Link>
                   <Badge tone={STATUS[j.status]?.tone || j.status}>{STATUS[j.status]?.label || j.status}</Badge>
                   <span className="faint">{formatDate(j.created_at)} · {j.requested_by}</span>
                 </li>

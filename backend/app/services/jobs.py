@@ -37,12 +37,12 @@ from ..drivers.base import ModelInfo
 from ..drivers.registry import get_driver
 from ..errors import ApiError
 from ..models.common import oid
-from ..models.job import CANCELLABLE, RUNNING, TERMINAL, JobCreate, RunRequest
+from ..models.job import CANCELLABLE, FAILED, RUNNING, TERMINAL, JobCreate, RunRequest
 from ..models.plan import ConfigPlan
 from ..security.rbac import require_owner_or_admin
 from ..security.sessions import SessionUser
 from . import audit, planning, validation, wizards
-from .connection import ConnectFailed, ConnectParams
+from .connection import ConnectFailed, ConnectParams, default_port
 from .hostkeys import Connector
 from .push import Held, PushEngine, StepInput, StepResult
 
@@ -117,7 +117,7 @@ def aggregate(statuses: list[str]) -> str:
         return "success"
     if "success" in statuses:
         return "failed"  # partly applied: some devices changed, others not
-    for s in ("failed", "rolled_back", "blocked"):
+    for s in FAILED:
         if s in statuses:
             return s
     return "cancelled"
@@ -174,7 +174,8 @@ def create(db: Database, settings: Settings, user: SessionUser, body: JobCreate,
             raise ApiError(422, f"{p.device['name']} has no connection method.",
                            fields={"device_id": "set SSH, serial or lab console"})
         if p.production and p.driver_doc.get("support") == "experimental" and not settings.enable_experimental_drivers:
-            raise ApiError(422, "Experimental driver on a production device.", fields={
+            raise ApiError(422, "This production device uses an experimental (not lab-tested) driver, so it cannot be "
+                                "pushed to.", fields={
                 "device_id": f"{p.driver.os_name} is experimental (not lab-tested). Production pushes need "
                              "ENABLE_EXPERIMENTAL_DRIVERS=true."})
     now = clock.now()
@@ -311,7 +312,7 @@ def merge_secrets(plan_doc: dict, req: RunRequest) -> ConfigPlan:
             else:
                 ssh["enable_secret"] = req.new_enable_secret.get_secret_value()
     if missing:
-        raise ApiError(422, "Some secrets are missing.", fields=missing)
+        raise ApiError(422, "The plan needs secrets that were not entered; fill in the marked fields.", fields=missing)
     return ConfigPlan.model_validate(data)
 
 
@@ -422,7 +423,8 @@ class JobRunner:
         new = _move(self.db, doc["_id"], ("ready",), "queued",
                     {"run_by": {"id": user.user_id, "username": user.username}})
         if not new:
-            raise ApiError(409, "The job is no longer ready.")
+            raise ApiError(409, "This job can no longer be run: it was cancelled, expired or already started. "
+                           "Reload to see its status.")
         self.vault.put(job_id, req)
         audit.record(self.db, "job.run", who=user, target={"type": "job", "id": job_id},
                      details={"kind": doc["kind"], "devices": [d["name"] for d in devices],
@@ -563,7 +565,7 @@ class Execution:
         values = {"method": conn.get("method"), "host": device.get("mgmt_ip"), "port": conn.get("port"),
                   "username": username, "password": password, "secret": secret,
                   "serial_port": conn.get("serial_port"), "baud": conn.get("baud") or 9600, **override}
-        values["port"] = values["port"] or (23 if values["method"] == "telnet_lab" else 22)
+        values["port"] = values["port"] or default_port(values["method"])
         return ConnectParams(device_type=driver.netmiko_device_type, config_prompt=driver.config_prompt, **values)
 
     def _input(self, i: int) -> StepInput:

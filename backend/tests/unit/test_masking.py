@@ -30,6 +30,13 @@ CASES = [
     ("snmp-server user u1 g1 v3 auth sha AuthPass1 priv aes 128 PrivPass1",
      "snmp-server user u1 g1 v3 auth sha " + MASK + " priv aes 128 " + MASK),
     (" wpa-psk ascii 0 WifiKey123", " wpa-psk ascii 0 " + MASK),
+    # AOS-CX puts ciphertext|plaintext between the keyword and the secret (Phase 4D security review)
+    ("radius-server host 10.1.1.1 key ciphertext AQBapXYZ", "radius-server host 10.1.1.1 key ciphertext " + MASK),
+    ("tacacs-server host 10.1.1.1 key plaintext MyKey123", "tacacs-server host 10.1.1.1 key plaintext " + MASK),
+    ("snmpv3 user u1 auth sha auth-pass ciphertext AQBauth priv aes priv-pass ciphertext AQBpriv",
+     "snmpv3 user u1 auth sha auth-pass ciphertext " + MASK + " priv aes priv-pass ciphertext " + MASK),
+    ("ntp authentication-key 1 md5 ciphertext AQBx", "ntp authentication-key 1 md5 ciphertext " + MASK),
+    ("ntp authentication-key 2 sha1 plaintext Clear1", "ntp authentication-key 2 sha1 plaintext " + MASK),
 ]
 
 

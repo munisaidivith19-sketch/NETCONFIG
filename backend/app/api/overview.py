@@ -8,6 +8,7 @@ from pymongo.database import Database
 
 from .. import clock
 from ..errors import ApiError
+from ..models.job import FAILED, RUNNING, WAITING
 from ..security.ratelimit import RateLimiter
 from ..security.rbac import require_engineer, require_viewer
 from ..security.sessions import SessionUser
@@ -16,9 +17,6 @@ from .deps import get_db
 router = APIRouter(prefix="/api/overview", tags=["overview"])
 refresh_limit = RateLimiter(limit=6, window_seconds=60)
 
-FAILED = ("failed", "rolled_back", "blocked")
-WAITING = ("awaiting_approval", "ready")
-RUNNING = ("queued", "connecting", "backing_up", "checking", "applying", "verifying", "saving", "rolling_back")
 DAYS = 14
 MAX_SAMPLES = 96
 
@@ -45,8 +43,8 @@ def _job_days(db: Database, now) -> list[dict]:
 
 def _status_history(db: Database, now) -> list[dict]:
     rows = list(db.status_samples.find({"at": {"$gte": now - timedelta(hours=24)}}, {"_id": 0}).sort("at", 1))
-    step = max(1, len(rows) // MAX_SAMPLES)
-    return rows[::step][-MAX_SAMPLES:]
+    step = max(1, -(-len(rows) // MAX_SAMPLES))  # ceiling: at most MAX_SAMPLES rows that still span all 24 h
+    return rows[::step]
 
 
 def _port_key(name: str | None) -> str:
@@ -71,7 +69,7 @@ def _topology(devices: list[dict], models: dict) -> dict:
         for alias in (d["name"], (d.get("facts") or {}).get("hostname")):
             if alias:
                 by_name.setdefault(alias.split(".")[0].lower(), node["id"])
-    links, seen, external = [], set(), {}
+    links, uplinks, seen, external = [], [], set(), {}
     for d in devices:
         a = str(d["_id"])
         for n in d.get("neighbors") or []:
@@ -80,6 +78,8 @@ def _topology(devices: list[dict], models: dict) -> dict:
                 continue
             b = by_name.get(remote)
             if b is None:
+                if remote == "unknown":  # no system name: one shared "unknown" node would wire unrelated devices
+                    remote = f"unknown ({d['name']} {n.get('local') or ''})".strip()
                 b = external.setdefault(remote, f"ext:{remote}")
             if a == b:
                 continue
@@ -91,8 +91,11 @@ def _topology(devices: list[dict], models: dict) -> dict:
                           "source": n.get("protocol") or "lldp"})
         up = d.get("uplink")
         if up and up.get("device_id"):
-            links.append({"a": up["device_id"], "b": a, "a_port": up.get("interface"), "b_port": None,
-                          "source": "uplink"})
+            uplinks.append({"a": up["device_id"], "b": a, "a_port": up.get("interface"), "b_port": None,
+                            "source": "uplink"})
+    # A recorded uplink that LLDP/CDP also found is drawn once (the discovered link, which names both ports).
+    linked = {frozenset((link["a"], link["b"])) for link in links}
+    links += [u for u in uplinks if frozenset((u["a"], u["b"])) not in linked]
     known = {node["id"] for node in nodes} | set(external.values())
     links = [link for link in links if link["a"] in known and link["b"] in known]
     nodes += [{"id": node_id, "name": name, "category": None, "model_name": None, "mgmt_ip": None,
@@ -103,15 +106,14 @@ def _topology(devices: list[dict], models: dict) -> dict:
 @router.get("")
 def overview(_: SessionUser = Depends(require_viewer), db: Database = Depends(get_db)) -> dict:
     now = clock.now()
-    devices = list(db.devices.find({}, {"name": 1, "model_id": 1, "mgmt_ip": 1, "status": 1, "tags": 1, "facts": 1,
-                                        "neighbors": 1, "uplink": 1}).limit(1000))
+    devices = list(db.devices.find({}, {"name": 1, "model_id": 1, "mgmt_ip": 1, "status.reachable": 1, "tags": 1,
+                                        "facts.hostname": 1, "facts.match.status": 1, "neighbors": 1,
+                                        "uplink": 1}).limit(1000))
     models = {m["_id"]: m for m in db.catalog_models.find({"_id": {"$in": list({d["model_id"] for d in devices})}},
-                                                          {"name": 1, "category": 1, "os_id": 1})}
-    drivers = {d["_id"]: d.get("support") for d in db.os_drivers.find({}, {"support": 1})}
+                                                          {"name": 1, "category": 1})}
 
     reach = {"up": 0, "down": 0, "unknown": 0}
     by_category: dict[str, int] = {}
-    by_support: dict[str, int] = {}
     mismatches = 0
     for d in devices:
         r = d.get("status", {}).get("reachable")
@@ -119,8 +121,6 @@ def overview(_: SessionUser = Depends(require_viewer), db: Database = Depends(ge
         model = models.get(d["model_id"], {})
         cat = model.get("category") or "unknown"
         by_category[cat] = by_category.get(cat, 0) + 1
-        support = drivers.get(model.get("os_id")) or "unknown"
-        by_support[support] = by_support.get(support, 0) + 1
         if ((d.get("facts") or {}).get("match") or {}).get("status") == "mismatch":
             mismatches += 1
 
@@ -147,7 +147,6 @@ def overview(_: SessionUser = Depends(require_viewer), db: Database = Depends(ge
         "jobs_by_day": _job_days(db, now),
         "status_history": _status_history(db, now),
         "devices_by_category": by_category,
-        "devices_by_support": by_support,
         "topology": _topology(devices, models),
         "recent_jobs": recent,
         "last_poll": last["at"] if last else None,
@@ -161,6 +160,7 @@ def refresh(request: Request, user: SessionUser = Depends(require_engineer)) -> 
         raise ApiError(429, "Status was refreshed recently; wait a minute.")
     poller = getattr(request.app.state, "poller", None)
     if poller is None or poller.interval <= 0:
-        raise ApiError(409, "Status polling is turned off (STATUS_POLL_SECONDS=0).")
+        raise ApiError(409, "Status checks are turned off (STATUS_POLL_SECONDS=0). Set it to 60 in backend/.env and "
+                             "restart NetConfig Studio.")
     poller.wake()
     return {"ok": True}

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Cable, Camera, Pencil, Plus, Search, Server, ShieldAlert, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { del, get, patch, post } from '../lib/api.js'
 import { useAuth } from '../lib/auth.jsx'
-import { CATEGORIES, CONNECTIONS, SUPPORT, categoryIcon, categoryLabel } from '../lib/labels.js'
+import { CATEGORIES, CONNECTIONS, SUPPORT, TELNET_WARNING, categoryIcon, categoryLabel } from '../lib/labels.js'
 import DeviceForm from '../components/DeviceForm.jsx'
 import { Alert, Badge, Dialog, Empty, ErrorNote, Field, PageHeader, Panel, SkeletonRows, formatDate } from '../components/ui.jsx'
 
@@ -248,7 +248,7 @@ export default function Devices() {
 
         <Panel title={selected ? selected.name : 'Device details'} subtitle={selected ? `${selected.brand} ${selected.model_name}` : 'Select a device.'}>
           {!selected ? (
-            <Empty icon={Server} title="No device selected" />
+            <Empty icon={Server} title="No device selected">Select a device in the list to see its details, facts and uplink.</Empty>
           ) : (
             <div className="stack">
               <div className="row">
@@ -264,7 +264,7 @@ export default function Devices() {
                 <div><dt className="faint">Tags</dt><dd style={{ margin: 0 }}>{selected.tags.length ? selected.tags.join(', ') : '—'}</dd></div>
                 <div><dt className="faint">Added</dt><dd style={{ margin: 0 }}>{formatDate(selected.created_at)}</dd></div>
               </dl>
-              {selected.connection.method === 'telnet_lab' && <Alert tone="warning">Lab console over telnet – unencrypted.</Alert>}
+              {selected.connection.method === 'telnet_lab' && <Alert tone="warning" title="Insecure lab console.">{TELNET_WARNING}</Alert>}
               {(selected.category === 'ap' || selected.category === 'camera') && <UplinkInfo device={selected} can={can} />}
               <Facts facts={selected.facts} />
               {selected.category === 'camera' && can('engineer') && selected.mgmt_ip && (

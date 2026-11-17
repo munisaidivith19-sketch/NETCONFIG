@@ -98,10 +98,10 @@ def prepare(db: Database, settings: Settings, plan: ConfigPlan, *, device_id: st
     p.warnings += result.warnings
     p.unsupported = result.unsupported
 
-    option_errors, notes = driver.review(plan)  # plan options this OS does differently or cannot do
-    for path, message in option_errors.items():
-        p.errors.setdefault(path, message)
-    p.warnings += notes
+    if not p.errors:  # review() parses addresses strictly: only a plan that passed validation reaches it
+        option_errors, notes = driver.review(plan)  # plan options this OS does differently or cannot do
+        p.errors.update(option_errors)
+        p.warnings += notes
     if plan.custom_commands and p.production:
         p.errors.setdefault("custom_commands", PRODUCTION_CUSTOM)
     if p.errors:

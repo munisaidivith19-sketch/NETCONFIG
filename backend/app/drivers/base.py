@@ -60,7 +60,8 @@ class Session:
     start: tuple[str, ...] = ()  # exec mode, before begin (starts the timer on AOS-CX)
     revert: tuple[str, ...] = ()  # undo a live change now
     confirm: tuple[str, ...] = ()  # keep the change (cancels the timer)
-    arm: tuple[str, ...] = ()  # config mode, after the plan commands (starts the timer on commit-based OSes)
+    check: tuple[str, ...] = ()  # config mode, after the plan: validates the candidate, commits nothing
+    arm: tuple[str, ...] = ()  # config mode, after check: commits (starts the timer on commit-based OSes)
     discard: tuple[str, ...] = ()  # config mode: drop changes that were never committed
     leave: tuple[str, ...] = ()  # config mode: sent before leaving it (AOS-CX "end": Netmiko misses sub-contexts)
     confirm_in_config: str | None = None  # confirm must be sent inside this config session (Junos "commit")

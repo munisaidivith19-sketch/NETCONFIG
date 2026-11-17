@@ -15,7 +15,7 @@ from pymongo.database import Database
 from .. import clock
 from ..drivers.base import ModelInfo
 from ..drivers.registry import get_driver
-from .connection import ConnectFailed, ConnectionLost, ConnectParams
+from .connection import ConnectFailed, ConnectionLost, ConnectParams, default_port
 
 # Text that identifies an OS in "show version" (or the OS's equivalent). Used to warn when the device is not
 # running the OS of the catalog model the engineer chose.
@@ -105,7 +105,7 @@ def discover(db: Database, connector, settings, device: dict, login: Login, who=
     driver = get_driver(device["os_id"], ModelInfo.from_doc(model_doc), settings)
     if driver is None:
         raise DiscoveryError("This device has no enabled driver, so its facts cannot be read.", 422)
-    port = conn_cfg.get("port") or (23 if method == "telnet_lab" else 22)
+    port = conn_cfg.get("port") or default_port(method)
     params = ConnectParams(method=method, device_type=driver.netmiko_device_type, host=device["mgmt_ip"], port=port,
                            username=login.username, password=login.password, secret=login.secret,
                            config_prompt=driver.config_prompt)

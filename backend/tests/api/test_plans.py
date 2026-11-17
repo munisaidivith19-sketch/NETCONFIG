@@ -1,8 +1,12 @@
 """POST /api/plans/preview (Phase 2B): validation, masking, production rules, audit."""
 
 import json
+from pathlib import Path
+
+import pytest
 
 URL = "/api/plans/preview"
+GOLDEN = Path(__file__).resolve().parents[1] / "golden"
 PLAN = {
     "basic": {"hostname": "core1", "domain": "lab.example.net"},
     "ssh": {"username": "netadmin", "password": "Very-Secret-77"},
@@ -120,3 +124,19 @@ def test_custom_commands_rejected_on_production(client_for):
 
 def test_viewer_cannot_preview(client_for):
     assert client_for("viewer").post(URL, json={"model_id": "cisco-iosv", "plan": {}}).status_code == 403
+
+
+
+@pytest.mark.parametrize("model_id", ["arista-ceos-lab", "juniper-vjunos-switch"])
+def test_invalid_dhcp_pool_returns_field_errors_not_a_crash(client_for, model_id):
+    """Phase 4D review: the driver review parses addresses strictly; it must only see a plan that passed validation.
+    A pool written with host bits set (10.0.30.1/24) used to crash the preview with 'Internal error'."""
+    eng = client_for("engineer")
+    plan = json.loads((GOLDEN / "arista_eos" / "dhcp_pool_excluded.json").read_text(encoding="utf-8"))["plan"]
+    plan["dhcp"][0]["network"] = "10.0.30.1/24"
+    if model_id.startswith("juniper"):
+        plan["interfaces"][0]["interface"] = "ge-0/0/1"
+    r = eng.post(URL, json={"model_id": model_id, "plan": plan})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert not body["ok"] and any(k.startswith("dhcp.0") for k in body["errors"]), body["errors"]

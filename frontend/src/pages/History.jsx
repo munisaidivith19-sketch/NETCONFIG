@@ -60,7 +60,7 @@ function JobList() {
         {!data ? (
           <SkeletonRows rows={5} />
         ) : data.items.length === 0 ? (
-          <Empty icon={HistoryIcon} title={status || kind ? 'No jobs match these filters' : 'No pushes yet'}
+          <Empty icon={HistoryIcon} title={status || kind ? 'No jobs match these filters' : 'No jobs yet'}
             action={!status && !kind ? <Link className="btn primary" to="/configure">Configure a device</Link> : null}>
             {!status && !kind && 'Jobs appear here once you create one in Configure.'}
           </Empty>
@@ -72,9 +72,9 @@ function JobList() {
                   <tr>
                     <th scope="col">Created</th>
                     <th scope="col">Device</th>
+                    <th scope="col">Status</th>
                     <th scope="col">Kind</th>
                     <th scope="col">Requested by</th>
-                    <th scope="col">Status</th>
                     <th scope="col">Note</th>
                   </tr>
                 </thead>
@@ -83,16 +83,16 @@ function JobList() {
                     <tr key={j.id}>
                       <td className="faint" style={{ whiteSpace: 'nowrap' }}>{formatDate(j.created_at)}</td>
                       <td><Link className="cell-title" to={`/history/${j.id}`}>{deviceNames(j)}</Link></td>
+                      <td><StatusBadge status={j.status} /></td>
                       <td className="faint">{KIND[j.kind] || KIND.push}</td>
                       <td>{j.requested_by.username}</td>
-                      <td><StatusBadge status={j.status} /></td>
                       <td className="faint">{j.note || '—'}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <div className="row between" style={{ marginTop: 16 }}>
+            <div className="row between" style={{ marginTop: 'var(--space-4)' }}>
               <span className="faint">{data.total} jobs · page {page} of {pages}</span>
               <div className="row">
                 <button className="btn small" type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</button>

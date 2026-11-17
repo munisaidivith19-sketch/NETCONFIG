@@ -256,8 +256,10 @@ class PushEngine:
                 if err:
                     res.error = {"command": log.scrub(cmd), "message": log.scrub(err)}
                     return self._stop_in_config(conn, step, res, log, deadline)
-            for cmd in sess.arm:  # commit-based OS: check, then commit with the device's own timer
-                applied = True
+            for cmd in sess.check + sess.arm:  # commit-based OS: check, then commit with the device's own timer
+                # "check" commits nothing: only from the first arm command on can the change be live. Marking the step
+                # applied earlier would make a dropped connection send "rollback 1", undoing someone else's commit.
+                applied = applied or cmd in sess.arm
                 out = conn.config_line(cmd, driver.prompts(cmd))
                 log.add(cmd, out)
                 err = find_error(driver, out)

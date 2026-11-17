@@ -1,6 +1,9 @@
 """Experimental drivers (Phase 4A): MikroTik RouterOS, Huawei VRP, D-Link DGS, TP-Link JetStream. Golden command
 files are in tests/golden/<os_id>/; these tests cover gating, secrets, safety rules, parsers and checks."""
 
+import json
+from pathlib import Path
+
 import pytest
 
 from app.config import Settings
@@ -17,6 +20,7 @@ from app.services.catalog import load_file
 from app.services.push import find_error
 
 MODELS = {m["_id"]: m for m in load_file()["models"]}
+GOLDEN = Path(__file__).resolve().parents[1] / "golden"
 MT = MikrotikRouteros(ModelInfo.from_doc(MODELS["mikrotik-crs326-24g-2s"]))
 HW = HuaweiVrp(ModelInfo.from_doc(MODELS["huawei-s5735-l24t4s-a"]))
 DL = DlinkDs(ModelInfo.from_doc(MODELS["dlink-dgs-1210-28"]))
@@ -122,11 +126,23 @@ def test_huawei_management_interface_and_check():
     ("/ip service set ssh disabled=yes", True), ("/ip service set ssh port=2222", True),
     ("/interface bridge port set [find interface=ether2] pvid=20", False),
     ("/ip service set telnet disabled=yes", False), ("/system identity set name=sw1", False),
+    # Phase 4D security review: item named without "name=", and menu changes / relative commands
+    ("/interface ethernet disable ether1", True), ("/interface ethernet set ether1 disabled=yes", True),
+    ("/interface ethernet disable ether2", False),
+    ("/system", True), ("reboot", True), ("/system\nreboot", True), ("set ether1 disabled=yes", True),
 ])
 def test_routeros_safety(command, blocked):
     found = safety.check_denylist([command], MT.denylist()) + safety.management_violations(
         MT, [command], mgmt_interface="ether1", mgmt_ip="10.0.0.2", via_ssh=True)
     assert bool(found) == blocked, found
+
+
+def test_routeros_generated_lines_pass_when_the_management_interface_is_the_bridge():
+    """Menu words ("/interface bridge ...") are not items: the driver's own VLAN lines stay allowed."""
+    case = json.loads((GOLDEN / "mikrotik_routeros" / "vlans_access_trunk.json").read_text(encoding="utf-8"))
+    commands = MT.generate(ConfigPlan.model_validate(case["plan"]), "push")
+    assert any("bridge=bridge" in c for c in commands)
+    assert not safety.management_violations(MT, commands, mgmt_interface="bridge", mgmt_ip="10.0.0.2", via_ssh=True)
 
 
 def test_routeros_parsers_and_checks():

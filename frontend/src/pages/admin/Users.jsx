@@ -114,7 +114,7 @@ export default function Users() {
         )}
       </Panel>
       <Panel title="Roles">
-        <ul className="stack" style={{ margin: 0, paddingLeft: 18 }}>
+        <ul className="stack" style={{ margin: 0, paddingLeft: 'var(--space-5)' }}>
           {ROLES.map((r) => <li key={r}><strong>{r}</strong> – {ROLE_HELP[r]}</li>)}
         </ul>
       </Panel>

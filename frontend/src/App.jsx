@@ -12,7 +12,7 @@ import Audit from './pages/admin/Audit.jsx'
 import Users from './pages/admin/Users.jsx'
 import Login from './pages/Login.jsx'
 import Overview from './pages/Overview.jsx'
-import Placeholder from './pages/Placeholder.jsx'
+import NotFound from './pages/NotFound.jsx'
 import RouterLink from './pages/RouterLink.jsx'
 
 export default function App() {
@@ -45,7 +45,7 @@ export default function App() {
         <Route path="admin/users" element={<RequireAuth role="admin"><Users /></RequireAuth>} />
         <Route path="admin/audit" element={<RequireAuth role="admin"><Audit /></RequireAuth>} />
         <Route path="admin/host-keys" element={<RequireAuth role="admin"><HostKeys /></RequireAuth>} />
-        <Route path="*" element={<Placeholder title="Page not found" phase="no phase – check the address" />} />
+        <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>
   )

@@ -40,11 +40,11 @@ export default function Login() {
           </span>
           <span>
             <strong>NetConfig Studio</strong>
-            <span>Sign in to configure your network</span>
+            <span className="brand-sub">Sign in to configure your network</span>
           </span>
         </div>
         <form onSubmit={submit} noValidate>
-          {expired && !error && <Alert tone="warning">Your session ended. Please sign in again.</Alert>}
+          {expired && !error && <Alert tone="warning">Your session expired (30 minutes without activity, or 8 hours in total). Sign in again to continue.</Alert>}
           {error && <Alert tone="danger">{error}</Alert>}
           <Field label="Username">
             {(props) => (

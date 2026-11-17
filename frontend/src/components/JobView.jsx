@@ -47,7 +47,7 @@ function Outcome({ job, step }) {
     return <Alert tone="success" title="Done.">The change was applied, verified{job.plan?.save === false ? '' : ' and saved'}.</Alert>
   }
   if (!err && !['failed', 'blocked', 'rolled_back'].includes(status)) return null
-  const title = { blocked: 'Blocked – nothing was sent.', rolled_back: 'Rolled back.', failed: 'Failed.' }[status] || 'Problem.'
+  const title = { blocked: 'Blocked – nothing was sent.', rolled_back: 'Rolled back – the device is back on its previous configuration.', failed: 'Failed.' }[status] || 'Problem.'
   return (
     <Alert tone={status === 'rolled_back' ? 'warning' : 'danger'} title={title}>
       {err?.message}

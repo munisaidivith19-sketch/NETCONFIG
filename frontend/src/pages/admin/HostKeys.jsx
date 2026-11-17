@@ -71,7 +71,7 @@ export default function HostKeys() {
                       <div className="faint">{k.key_type}</div>
                       <div className="fingerprint">{k.fingerprint}</div>
                       {k.pending && (
-                        <div className="stack" style={{ marginTop: 8 }}>
+                        <div className="stack" style={{ marginTop: 'var(--space-2)' }}>
                           <Badge tone="danger"><ShieldAlert size={14} aria-hidden="true" /> new key offered {formatDate(k.pending.seen_at)}</Badge>
                           <div className="faint">{k.pending.key_type}</div>
                           <div className="fingerprint">{k.pending.fingerprint}</div>

@@ -215,3 +215,30 @@ def test_overview_kpis_charts_and_topology(app, client_for, db):
 
 def test_overview_needs_a_login(client):
     assert client.get("/api/overview").status_code == 401
+
+
+def test_status_history_spans_the_whole_day(db):
+    """Phase 4D review: 150 samples must not be cut to the newest 96; the oldest sample stays in."""
+    from app.api.overview import MAX_SAMPLES, _status_history
+    now = clock.now()
+    db.status_samples.insert_many([{"at": now - timedelta(minutes=150 - i), "up": i} for i in range(150)])
+    rows = _status_history(db, now)
+    assert len(rows) <= MAX_SAMPLES and rows[0]["up"] == 0
+
+
+def test_topology_draws_an_uplink_once_and_keeps_unnamed_neighbours_apart():
+    from app.api.overview import _topology
+    models = {"sw": {"category": "switch"}, "ap": {"category": "ap"}}
+    devices = [
+        {"_id": "s1", "name": "sw1", "model_id": "sw", "neighbors": [
+            {"remote": "ap1", "local": "Gi0/1", "port": "eth0", "protocol": "lldp"},
+            {"remote": "unknown", "local": "Gi0/2", "port": None, "protocol": "lldp"}]},
+        {"_id": "s2", "name": "sw2", "model_id": "sw", "neighbors": [
+            {"remote": "unknown", "local": "Gi0/9", "port": None, "protocol": "lldp"}]},
+        {"_id": "a1", "name": "ap1", "model_id": "ap", "uplink": {"device_id": "s1", "interface": "Gi0/1"}},
+    ]
+    topo = _topology(devices, models)
+    between = [link for link in topo["links"] if {link["a"], link["b"]} == {"s1", "a1"}]
+    assert len(between) == 1 and between[0]["source"] == "lldp"
+    unknown = [n for n in topo["nodes"] if n["external"]]
+    assert len(unknown) == 2  # one per device port, not one shared fake node

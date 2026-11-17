@@ -130,7 +130,10 @@ def list_devices(
         pattern = re.escape(q)
         query["$or"] = [{"name": {"$regex": pattern, "$options": "i"}}, {"mgmt_ip": {"$regex": "^" + pattern}}]
     total = db.devices.count_documents(query)
-    cursor = db.devices.find(query, sort=[("name", 1)], collation=CI).skip((page - 1) * page_size).limit(page_size)
+    # The list leaves out the discovered VLAN and neighbour tables (up to 4094 + 256 rows per device); they are
+    # read with GET /devices/{id}.
+    cursor = db.devices.find(query, {"vlans": 0, "neighbors": 0}, sort=[("name", 1)], collation=CI) \
+        .skip((page - 1) * page_size).limit(page_size)
     cache: dict = {}
     return {"items": [_device_out(db, d, cache) for d in cursor], "total": total, "page": page,
             "page_size": page_size}
@@ -197,8 +200,10 @@ def delete_device(device_id: str, request: Request, user: SessionUser = Depends(
     if not doc:
         raise ApiError(404, "Device not found.")
     db.devices.delete_one({"_id": doc["_id"]})
+    # APs and cameras plugged into this switch lose their uplink; a stale one would fail every later edit of them.
+    cleared = db.devices.update_many({"uplink.device_id": str(doc["_id"])}, {"$unset": {"uplink": ""}}).modified_count
     audit.record(db, "device.delete", who=user, target={"type": "device", "id": device_id},
-                 details={"name": doc["name"]}, request_id=rid(request))
+                 details={"name": doc["name"], "uplinks_cleared": cleared}, request_id=rid(request))
     return {"ok": True}
 
 

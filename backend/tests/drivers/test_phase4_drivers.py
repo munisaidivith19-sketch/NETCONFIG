@@ -123,6 +123,9 @@ em0.0                   up    up   inet     192.168.122.10/24
     ("deactivate interfaces ge-0/0/0", True),
     ("set interfaces ge-0/0/0 unit 0 family ethernet-switching interface-mode access", True),
     ("set interfaces interface-range R member ge-0/0/0", True),
+    ("set interfaces interface-range R member-range ge-0/0/1 to ge-0/0/3", True),  # may hold the mgmt port
+    ("set interfaces interface-range R member ge-0/0/*", True),
+    ("set interfaces interface-range R member ge-0/0/5", False),
     ("set interfaces ge-0/0/0 unit 0 family inet address 10.9.9.9/24", True),
     ("set interfaces ge-0/0/5 unit 0 family inet address 10.0.0.2/24", True),
     ("set interfaces ge-0/0/0 unit 0 family inet address 10.0.0.2/24", False),
@@ -159,6 +162,12 @@ def test_aoscx_management_interface_and_protection():
     assert found
     assert safety.management_violations(CX, ["no ssh server vrf default"], mgmt_interface="Vlan99",
                                         mgmt_ip="10.0.99.2", via_ssh=True)
+    # The out-of-band port is addressed with "ip static" (Phase 4D review): changing or removing it is blocked.
+    for change in (["interface mgmt", "    ip static 192.168.1.99/24"], ["interface mgmt", "    no ip static"]):
+        assert safety.management_violations(CX, change, mgmt_interface="mgmt", mgmt_ip="192.168.1.10",
+                                            via_ssh=True), change
+    assert not safety.management_violations(CX, ["interface mgmt", "    ip static 192.168.1.10/24"],
+                                            mgmt_interface="mgmt", mgmt_ip="192.168.1.10", via_ssh=True)
 
 
 @pytest.mark.parametrize(("drv", "command"), [
@@ -166,6 +175,9 @@ def test_aoscx_management_interface_and_protection():
     (JUNOS, "request system reboot"), (JUNOS, "exit configuration-mode"),
     (EOS, "configure session x abort"), (EOS, "commit"), (EOS, "reload now"),
     (CX, "checkpoint rollback startup-config"), (CX, "erase checkpoint all"), (CX, "no user netadmin"),
+    # Phase 4D security review: shells, leaving the EOS session, Junos configuration groups
+    (EOS, "bash sudo shutdown -r now"), (EOS, "end"), (CX, "start-shell"),
+    (JUNOS, "set groups G interfaces ge-0/0/0 disable"), (JUNOS, "set apply-groups G"),
 ])
 def test_driver_denylist(drv, command):
     assert safety.check_denylist([command], drv.denylist())

@@ -8,20 +8,31 @@ import ipaddress
 import re
 
 from ..models.plan import ConfigPlan
-from ..security.masking import MASK
-from .base import Check, Kind, ModelInfo, Session, UnsupportedFeature, vlan_list
+from .base import Check, Kind, ModelInfo, Session, vlan_list
 from .cisco_ios import parse_running_config
-from .common import dhcp_interface, dhcp_range, first, logical, normalize_by_types, section_checks, vlan_rows
+from .common import (
+    DriverDefaults,
+    dhcp_interface,
+    dhcp_range,
+    first,
+    logical,
+    normalize_by_types,
+    secret_value,
+    section_checks,
+    vlan_rows,
+)
 
 CAPABILITIES = {"vlans", "access", "trunk", "svi", "routed_if", "dhcp", "nat", "static", "ospf", "bgp", "ssh",
                 "default_gateway"}  # no EIGRP on EOS
 IF_TYPES = ["Ethernet", "Vlan", "Loopback", "Port-Channel", "Management"]
+# Default lines EOS leaves out of "show running-config" (access mode, native VLAN 1) [LAB]: never "missing".
+EOS_HIDDEN_DEFAULTS = frozenset({"switchport mode access", "switchport trunk native vlan 1"})
 ERROR_PATTERNS = [r"% Invalid input", r"% Incomplete command", r"% Ambiguous command", r"% Unrecognized command",
                   r"% Unavailable command", r"% Error", r"% Maximum number"]
 NAT_ACL = "NCS_NAT_INSIDE"
 
 
-class AristaEos:
+class AristaEos(DriverDefaults):
     os_id = "arista_eos"
     os_name = "Arista EOS"
     netmiko_device_type = "arista_eos"
@@ -71,9 +82,7 @@ class AristaEos:
 
     # ------------------------------------------------------------ generate
     def generate(self, plan: ConfigPlan, kind: Kind) -> list[str]:
-        for feature in plan.features():
-            if feature not in self.capabilities:
-                raise UnsupportedFeature(feature, self.os_name)
+        self._check_features(plan)
         out: list[str] = []
         if plan.basic:
             out.append(f"hostname {plan.basic.hostname}")
@@ -133,16 +142,9 @@ class AristaEos:
         if not s:
             return
 
-        def secret(value, what: str) -> str:
-            if kind == "preview":
-                return MASK
-            if value is None:
-                raise ValueError(f"{what} is required to push this plan")
-            return value.get_secret_value()
-
-        out.append(f"username {s.username} privilege 15 role network-admin secret {secret(s.password, 'ssh.password')}")
+        out.append(f"username {s.username} privilege 15 role network-admin secret {secret_value(s.password, kind)}")
         if s.set_enable_secret:
-            out.append(f"enable password {secret(s.enable_secret, 'ssh.enable_secret')}")
+            out.append(f"enable password {secret_value(s.enable_secret, kind, 'ssh.enable_secret')}")
         out += ["management ssh", f"   idle-timeout {s.vty_timeout_minutes}"]
 
     def _dhcp(self, plan: ConfigPlan, out: list[str]) -> None:
@@ -203,7 +205,7 @@ class AristaEos:
             return [Check("output of 'show running-config'", False, "command output missing")]
         run = parse_running_config(outputs["show running-config"])
         own = self.generate(plan, "preview")
-        checks = section_checks(own[:len(own) - len(plan.custom_commands)], run)
+        checks = section_checks(own[:len(own) - len(plan.custom_commands)], run, EOS_HIDDEN_DEFAULTS)
         if plan.vlans:
             out = outputs.get("show vlan", "")
             rows = {int(m.group(1)): (m.group(2), m.group(3))
@@ -235,9 +237,9 @@ class AristaEos:
 
     # -------------------------------------------------------- push support
     def denylist(self) -> list[tuple[tuple[str, ...], str]]:
-        # Only the push engine opens, commits or aborts a configuration session.
+        # Only the push engine opens, commits, aborts or leaves ("end") a configuration session.
         return [(("configure", "session"), "configure session"), (("commit",), "commit"),
-                (("abort",), "abort"), (("rollback",), "rollback")]
+                (("abort",), "abort"), (("rollback",), "rollback"), (("end",), "end")]
 
     def error_patterns(self) -> list[str]:
         return list(ERROR_PATTERNS)
@@ -266,23 +268,11 @@ class AristaEos:
     def backup_command(self) -> str:
         return "show running-config"
 
-    def config_dump_commands(self) -> set[str]:
-        return {"show running-config"}
-
     def management_commands(self) -> list[str]:
         return ["show ip interface brief"]
 
-    def precheck_commands(self, plan: ConfigPlan) -> list[str]:
-        return []
-
-    def adapt_commands(self, plan, commands, outputs):
-        return commands, []
-
     def prompts(self, command: str) -> list[tuple[str, str]] | None:
         return [] if command.startswith("commit") else None  # the commit can take a while: wait for the prompt
-
-    def rollback_setup(self, running_config: str) -> list[str]:
-        return []
 
     # ------------------------------------------------------------ discovery
     def facts_commands(self) -> list[str]:

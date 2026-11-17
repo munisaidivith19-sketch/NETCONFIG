@@ -16,6 +16,8 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
+    // Never inline fonts as data: URIs – the backend's CSP (font-src 'self') would block them.
+    assetsInlineLimit: (file) => (file.endsWith('.woff2') ? false : undefined),
   },
   test: {
     environment: 'jsdom',

@@ -26,6 +26,11 @@ DENYLIST: list[tuple[tuple[str, ...], str]] = [
     (("request", "system", "reboot"), "request system reboot"),
     (("debug", "all"), "debug all"),
     (("configure", "replace"), "configure replace"),
+    # Shells on the device: everything typed there skips this list ("bash sudo reboot" on EOS).
+    (("bash",), "bash"),  # Arista EOS
+    (("start-shell",), "start-shell"),  # Aruba AOS-CX, Junos
+    (("tclsh",), "tclsh"),  # Cisco IOS
+    (("guestshell",), "guestshell"),  # Cisco IOS-XE
 ]
 _SPLIT = re.compile(r"[\r\n;|&]+")
 
@@ -118,6 +123,11 @@ def _trunk_drops_vlan(args: list[str], vlan: int) -> bool:
     return vlan not in _vlan_ids("".join(args))
 
 
+def _sets_ip(body: list[str]) -> bool:
+    """ "ip address X" (Cisco, EOS, AOS-CX, Huawei) or "ip static X" (AOS-CX out-of-band "interface mgmt")."""
+    return len(body) >= 2 and body[0] == "ip" and (_abbr(body[1], "address") or body[1] == "static")
+
+
 def check_management(
     commands: Iterable[str],
     *,
@@ -207,9 +217,9 @@ def check_management(
                         what = "interface" if is_mgmt else "uplink"
                         flag(i, line, f"shuts down the management {what}")
                 if is_mgmt:
-                    if negated and len(body) >= 2 and body[0] == "ip" and _abbr(body[1], "address"):
+                    if negated and _sets_ip(body):
                         flag(i, line, "removes the management IP address")
-                    if not negated and len(body) >= 3 and body[0] == "ip" and _abbr(body[1], "address") \
+                    if not negated and len(body) >= 3 and _sets_ip(body) \
                             and mgmt_ip and body[2].split("/")[0] != mgmt_ip:
                         flag(i, line, "changes the management IP address")
                     vrf = body[:1] == ["vrf"] and len(body) >= 2 and _abbr(body[1], "forwarding")
@@ -226,7 +236,7 @@ def check_management(
                         flag(i, line, f"removes management VLAN {mgmt_vlan} from the uplink trunk")
 
             # Assigning the management IP to another interface creates a duplicate address.
-            if mgmt_ip and not negated and len(body) >= 3 and body[0] == "ip" and _abbr(body[1], "address") \
+            if mgmt_ip and not negated and len(body) >= 3 and _sets_ip(body) \
                     and body[2].split("/")[0] == mgmt_ip and context and context[0] == "interface" and mgmt \
                     and context[1] != mgmt:
                 flag(i, line, "puts the management IP address on another interface")
@@ -258,7 +268,6 @@ def check_management_set(commands: Iterable[str], *, mgmt_interface: str | None,
     SSH while connected over SSH. "delete" is on the global denylist, so nothing can be removed."""
     phys, _, unit = (mgmt_interface or "").lower().partition(".")
     unit = unit or "0"
-    out: list[Violation] = []
 
     def address_in(rest: list[str]) -> str | None:
         if "address" in rest and rest.index("address") + 1 < len(rest):
@@ -279,6 +288,9 @@ def check_management_set(commands: Iterable[str], *, mgmt_interface: str | None,
         addr = address_in(rest)
         if phys and name == "interface-range" and phys in rest:
             return "puts the management port into an interface range"
+        if phys and name == "interface-range" and ("member-range" in rest or any("*" in t or "[" in t for t in rest)):
+            # "member-range ge-0/0/1 to ge-0/0/3" or "member ge-0/0/*" can include the management port unnamed.
+            return "uses a member range or wildcard (it can include the management port); list the members one by one"
         if phys and name == phys:
             if w[0] == "deactivate" or ("disable" in rest and this_unit in (None, unit)):
                 return "disables the management interface"
@@ -290,13 +302,7 @@ def check_management_set(commands: Iterable[str], *, mgmt_interface: str | None,
             return "puts the management IP address on another interface"
         return None
 
-    for i, line in enumerate(commands):
-        for part in split_commands(line):
-            rule = rule_for(words_of(part))
-            if rule:
-                out.append(Violation(i, line, rule))
-                break
-    return out
+    return _violations(commands, rule_for)
 
 
 def _violations(commands: Iterable[str], rule_for: Callable[[list[str]], str | None]) -> list[Violation]:
@@ -308,6 +314,9 @@ def _violations(commands: Iterable[str], rule_for: Callable[[list[str]], str | N
                 out.append(Violation(i, line, rule))
                 break
     return out
+
+
+_ROS_ITEM_VERBS = {"set", "disable", "enable", "edit", "comment", "reset"}
 
 
 def check_management_routeros(commands: Iterable[str], *, mgmt_interface: str | None, mgmt_ip: str | None,
@@ -323,7 +332,11 @@ def check_management_routeros(commands: Iterable[str], *, mgmt_interface: str | 
         if {"remove", "unset"} & tokens:
             return "removes configuration ('remove' and 'unset' are never sent to RouterOS)"
         names = {t.split("=", 1)[1] for t in tokens if t.startswith(("interface=", "name="))}
-        on_mgmt = bool(mgmt) and (mgmt in names or (w[:2] == ["interface", "disable"] and mgmt in tokens))
+        # Also an item named after the command, without "name=": "/interface ethernet disable ether1",
+        # "/interface ethernet set ether1 disabled=yes". Words before the command are menus ("/interface bridge").
+        verb = next((k for k, t in enumerate(w) if t in _ROS_ITEM_VERBS), None)
+        items = {t.strip("[]") for t in w[verb + 1:] if "=" not in t} if verb is not None else set()
+        on_mgmt = bool(mgmt) and (mgmt in names or mgmt in items)
         if on_mgmt and ("disable" in tokens or "disabled=yes" in tokens):
             return "disables the management interface"
         if on_mgmt and any(t.startswith(("pvid=", "frame-types=", "bridge=", "vlan-id=")) for t in tokens):
@@ -338,6 +351,16 @@ def check_management_routeros(commands: Iterable[str], *, mgmt_interface: str | 
             return "changes the SSH service while connected over SSH"
         return None
 
+    commands = list(commands)
+    # A line without a full "/menu command" path runs in whatever menu an earlier line moved to: "/system" on one
+    # line and "reboot" on the next is "/system reboot", which no word-based rule would see.
+    relative = [Violation(i, line, "RouterOS commands must be one line with the full path and a command "
+                                   "('/ip address print'), not a menu change or a relative command")
+                for i, line in enumerate(commands)
+                for part in split_commands(line)
+                if not part.strip().startswith("/") or len(part.split()) < 2]
+    if relative:
+        return relative[:1]
     return _violations(commands, rule_for)
 
 

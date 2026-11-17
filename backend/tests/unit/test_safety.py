@@ -13,6 +13,8 @@ BLOCKED = [
     "reload", "erase startup-config", "write erase", "delete flash:x", "format flash:", "copy tftp: startup-config",
     "no username admin", "crypto key zeroize", "request system zeroize", "request system reboot", "debug all",
     "configure replace flash:old.cfg",
+    # device shells (Phase 4D security review): anything typed in them skips this list
+    "bash sudo shutdown -r now", "do bash", "start-shell", "tclsh", "guestshell run bash",
     # abbreviations
     "rel", "relo", "wr er", "era start", "del flash:x", "cry key zero rsa", "req sys reboot", "deb all",
     # do prefix

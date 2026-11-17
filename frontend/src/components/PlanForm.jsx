@@ -270,7 +270,7 @@ export default function PlanForm({ form, setForm, caps, errors, production, port
 
       <Section id="custom" title="Custom commands" hint="One command per line, sent as typed after the generated commands. Checked against the denylist and written to the audit log." error={exact('custom_commands') || e('commands')}>
         {production ? (
-          <Alert tone="warning">Custom commands are not allowed on production devices.</Alert>
+          <Alert tone="warning" title="Turned off for production devices.">Custom commands skip the form checks, so they are only allowed on lab and non-production devices. Use the form sections above instead.</Alert>
         ) : (
           <Field label="Commands" error={e('custom_commands')}>
             {(props) => (

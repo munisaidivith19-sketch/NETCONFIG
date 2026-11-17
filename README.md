@@ -105,6 +105,17 @@ The Cisco IOS driver is still **experimental** (not proven on an emulator yet). 
 devices tagged `production` additionally need `ENABLE_EXPERIMENTAL_DRIVERS=true` until the driver is
 marked `tested` (Phase 3B lab tests).
 
+## UI quality (Phase 4C)
+Every page was reviewed in light and dark themes, at desktop and 375 px phone width. The full write-up is in
+`docs/UI_REVIEW.md`.
+- **Contrast:** computed to WCAG 2.1 AA in both themes. Seven light-theme token values were darkened.
+- **Keyboard:** the network map and each chart are one Tab stop, moved with the arrow keys. Focus moves to
+  each new wizard step, and charts have a "Show as table" option.
+- **Phone:** the map and charts draw at the real panel width, so nodes and labels stay readable at 375 px.
+- **Copy:** one word per concept ("job"). Safety warnings say what to do.
+- **Rendered check:** the production build was loaded in headless Edge: 12 pages × 2 themes × 2 widths =
+  48 views. All pass: no horizontal scroll, no console or CSP errors, every control at least 44 px.
+
 ## Tests
 ```powershell
 cd backend;  .venv\Scripts\python -m pytest          # needs MongoDB running (uses database netconfig_test)
@@ -160,5 +171,6 @@ scripts/   Windows helper scripts
 | 3 | 3C review (code review, simplify, security review) | done |
 | 4 | 4A Arista, Juniper, Aruba drivers; experimental MikroTik, Huawei, D-Link, TP-Link; APs and cameras | done (all drivers experimental until `docs/LAB_TESTING.md` Part B passes) |
 | 4 | 4B status polling, read-only discovery, topology, live Overview | done (SNMPv3 not built: needs approval for `pysnmp`) |
-| 4 | 4C UI quality pass, 4D review | – |
+| 4 | 4C UI quality pass (contrast, keyboard, phone width, copy; see `docs/UI_REVIEW.md`) | done |
+| 4 | 4D review | – |
 | 5 | AI assistant, hardening, docs, release | – |

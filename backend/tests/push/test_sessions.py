@@ -86,6 +86,27 @@ def test_junos_failed_commit_check_is_discarded():
     assert "commit confirmed 10" not in fake.config_sent() and ("config", "rollback 0") in fake.sent
 
 
+def test_junos_connection_lost_during_commit_check_never_rolls_back_an_older_commit():
+    """Phase 4D review: "commit check" commits nothing. Losing the session there must not send "rollback 1"
+    (that would undo the previous, unrelated commit on the device)."""
+    class DropsOnCheck(FakeConnection):
+        def config_line(self, command, prompts=None):
+            if command == "commit check":
+                self.gone = True
+            return super().config_line(command, prompts)
+
+    fake = DropsOnCheck(responses={"show configuration | display set": JUNOS_SET})
+    connector = FakeConnector(fake)
+    engine = PushEngine(open_connection=lambda p, notes: connector.open(p, notes=notes), on_state=lambda s: None,
+                        sleep=lambda s: None)
+    params = ConnectParams(method="ssh", device_type=JUNOS.netmiko_device_type, host="10.0.0.2", port=22,
+                           username="netops", password=PASSWORD)
+    result = engine.run(StepInput(driver=JUNOS, plan=ConfigPlan.model_validate(PLAN), params=params, mgmt_ip=None,
+                                  secrets=[PASSWORD]))
+    assert result.status == "failed" and "before anything was applied" in result.error["message"]
+    assert "rollback 1" not in fake.config_sent() and connector.opens == 1
+
+
 def test_junos_failed_verification_rolls_back_the_confirmed_commit():
     result, states, fake = run(JUNOS, {"show configuration | display set": "set system host-name x"})
     assert result.status == "rolled_back" and "rolling_back" in states

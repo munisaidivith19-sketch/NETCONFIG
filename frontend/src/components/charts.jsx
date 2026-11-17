@@ -1,10 +1,10 @@
 // Small SVG charts for the Overview (no chart library). Rules from the dataviz skill: thin marks with 4px
 // rounded data ends, a 2px surface gap between stacked segments, recessive hairline grid, a legend for 2+
 // series, a hover/focus tooltip that never gates (every value is also in the table view), text in text tokens.
+// Charts draw at the width of their panel (1:1), so 12 px axis text stays 12 px on a phone.
 import { useId, useState } from 'react'
 import { Table2 } from 'lucide-react'
-
-const W = 640
+import { useWidth } from '../lib/useWidth.js'
 
 function niceMax(v) {
   if (v <= 4) return 4
@@ -69,6 +69,7 @@ export function TableToggle({ caption, columns, rows }) {
 
 /** Stacked columns per day. series: [{ key, label, color }]; extra: keys shown only in tooltip/table. */
 export function StackedColumns({ data, series, extra = [], label, height = 180 }) {
+  const [box, W] = useWidth(640)
   const [tip, setTip] = useState(null)
   const top = 12
   const bottom = 26
@@ -78,19 +79,31 @@ export function StackedColumns({ data, series, extra = [], label, height = 180 }
   const band = (W - left) / data.length
   const barW = Math.min(24, band * 0.6)
   const y = (v) => top + plotH - (v / max) * plotH
+  const every = Math.ceil(data.length / Math.max(2, Math.floor((W - left) / 64))) // one date label per ~64 px
 
   function show(d, i) {
     setTip({
+      index: i,
       left: ((left + band * i + band / 2) / W) * 100, top: 0, title: fmtDay(d.date),
       rows: [...series.map((s) => ({ label: s.label, value: d[s.key], color: s.color })),
         ...extra.map((e) => ({ label: e.label, value: d[e.key] }))],
     })
   }
 
+  // One Tab stop for the whole chart; the arrow keys walk the days and the tooltip (a live region) reads them out.
+  function onKey(e) {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+    e.preventDefault()
+    const at = tip?.index ?? (e.key === 'ArrowRight' ? -1 : data.length)
+    const i = Math.min(data.length - 1, Math.max(0, at + (e.key === 'ArrowRight' ? 1 : -1)))
+    show(data[i], i)
+  }
+
   return (
-    <div className="chart-wrap" onPointerLeave={() => setTip(null)}>
+    <div className="chart-wrap" ref={box} onPointerLeave={() => setTip(null)}>
       <Legend series={series} />
-      <svg className="chart" viewBox={`0 0 ${W} ${height}`} role="img" aria-label={label}>
+      <svg className="chart" viewBox={`0 0 ${W} ${height}`} role="img" tabIndex={0}
+        aria-label={`${label}. Use the arrow keys to read each day.`} onKeyDown={onKey} onBlur={() => setTip(null)}>
         {ticks(max).map((t) => (
           <g key={t}>
             <line className="grid-line" x1={left} x2={W} y1={y(t)} y2={y(t)} />
@@ -114,13 +127,11 @@ export function StackedColumns({ data, series, extra = [], label, height = 180 }
           })
           const total = series.reduce((s, x2) => s + d[x2.key], 0)
           return (
-            <g key={d.date} className="chart-hit" tabIndex={0} role="img"
-              aria-label={`${fmtDay(d.date)}: ${series.map((s) => `${d[s.key]} ${s.label}`).join(', ')}`}
-              onPointerEnter={() => show(d, i)} onFocus={() => show(d, i)} onBlur={() => setTip(null)}>
+            <g key={d.date} className={`chart-hit ${tip?.index === i ? 'active' : ''}`} onPointerEnter={() => show(d, i)}>
               <rect x={left + band * i} y={top} width={band} height={plotH} fill="transparent" />
               {segs}
               {total === 0 && <line x1={x} x2={x + barW} y1={y(0)} y2={y(0)} className="grid-line" />}
-              {(i % Math.ceil(data.length / 7) === 0 || i === data.length - 1) && (
+              {(i === data.length - 1 || (i % every === 0 && data.length - 1 - i >= every)) && (
                 <text className="axis-label" x={left + band * i + band / 2} y={height - 8} textAnchor="middle">{fmtDay(d.date)}</text>
               )}
             </g>
@@ -134,6 +145,7 @@ export function StackedColumns({ data, series, extra = [], label, height = 180 }
 
 /** One series over time with a crosshair. points: [{ at, value }]. */
 export function TrendLine({ points, label, valueLabel, max: givenMax, height = 160 }) {
+  const [box, W] = useWidth(640)
   const [idx, setIdx] = useState(null)
   const top = 12
   const bottom = 24
@@ -162,7 +174,7 @@ export function TrendLine({ points, label, valueLabel, max: givenMax, height = 1
   const last = points[points.length - 1]
 
   return (
-    <div className="chart-wrap" onPointerLeave={() => setIdx(null)}>
+    <div className="chart-wrap" ref={box} onPointerLeave={() => setIdx(null)}>
       <svg className="chart" viewBox={`0 0 ${W} ${height}`} role="img" tabIndex={0} aria-label={`${label}. Use the arrow keys to read values.`}
         onPointerMove={nearest} onKeyDown={onKey} onBlur={() => setIdx(null)}>
         {ticks(max).map((t) => (

@@ -16,8 +16,8 @@ import re
 from ..models.plan import ConfigPlan
 from ..security.masking import MASK
 from ..security.shacrypt import sha512_crypt
-from .base import Check, Kind, ModelInfo, Session, UnsupportedFeature, vlan_list
-from .common import dhcp_interface, dhcp_range, first, logical, vlan_rows
+from .base import Check, Kind, ModelInfo, Session, vlan_list
+from .common import DriverDefaults, dhcp_interface, dhcp_range, first, logical, secret_value, vlan_rows
 
 CAPABILITIES = {"vlans", "access", "trunk", "svi", "routed_if", "dhcp", "nat", "static", "ospf", "bgp", "ssh",
                 "default_gateway"}  # no EIGRP: a Cisco protocol
@@ -34,7 +34,7 @@ def quote(text: str) -> str:
     return f'"{text}"' if " " in text else text
 
 
-class JuniperJunos:
+class JuniperJunos(DriverDefaults):
     os_id = "juniper_junos"
     os_name = "Juniper Junos"
     netmiko_device_type = "juniper_junos"
@@ -132,9 +132,7 @@ class JuniperJunos:
 
     # ------------------------------------------------------------ generate
     def generate(self, plan: ConfigPlan, kind: Kind) -> list[str]:
-        for feature in plan.features():
-            if feature not in self.capabilities:
-                raise UnsupportedFeature(feature, self.os_name)
+        self._check_features(plan)
         out: list[str] = []
         if plan.basic:
             out.append(f"set system host-name {plan.basic.hostname}")
@@ -144,12 +142,8 @@ class JuniperJunos:
             out.append(f'set system login message "{plan.hardening.banner}"')
         if plan.ssh:
             s = plan.ssh
-            if kind == "preview":
-                hashed = MASK
-            elif s.password is None:
-                raise ValueError("ssh.password is required to push this plan")
-            else:
-                hashed = f'"{sha512_crypt(s.password.get_secret_value())}"'
+            pw = secret_value(s.password, kind)  # Junos gets a $6$ hash, never the password itself
+            hashed = MASK if pw == MASK else f'"{sha512_crypt(pw)}"'
             out += [f"set system login user {s.username} class super-user",
                     f"set system login user {s.username} authentication encrypted-password {hashed}",
                     "set system services ssh protocol-version v2"]
@@ -313,7 +307,9 @@ class JuniperJunos:
         return [(("commit",), "commit"), (("rollback",), "rollback"), (("load",), "load"),
                 (("deactivate",), "deactivate"), (("exit",), "exit"), (("quit",), "quit"), (("top",), "top"),
                 (("edit",), "edit"), (("request",), "request"), (("run",), "run"), (("replace",), "replace"),
-                (("rename",), "rename"), (("copy",), "copy"), (("insert",), "insert"), (("wildcard",), "wildcard")]
+                (("rename",), "rename"), (("copy",), "copy"), (("insert",), "insert"), (("wildcard",), "wildcard"),
+                # A configuration group applies its settings anywhere, past the management-port checks.
+                (("set", "groups"), "set groups"), (("set", "apply-groups"), "set apply-groups")]
 
     def error_patterns(self) -> list[str]:
         return list(ERROR_PATTERNS)
@@ -330,7 +326,8 @@ class JuniperJunos:
     def session(self, plan: ConfigPlan, name: str) -> Session:
         """docs/drivers/juniper_junos.md section 1."""
         return Session(strategy="commit_confirmed", begin="configure private",
-                       arm=("commit check", f"commit confirmed {plan.revert_minutes}"), discard=("rollback 0",),
+                       check=("commit check",), arm=(f"commit confirmed {plan.revert_minutes}",),
+                       discard=("rollback 0",),
                        confirm=("commit",), confirm_in_config="configure private",
                        revert=("rollback 1", "commit"), revert_in_config="configure private",
                        configure="configure private", applies_immediately=False)
@@ -344,24 +341,12 @@ class JuniperJunos:
     def backup_command(self) -> str:
         return "show configuration | display set"
 
-    def config_dump_commands(self) -> set[str]:
-        return {"show configuration | display set"}
-
     def management_commands(self) -> list[str]:
         return ["show interfaces terse"]
-
-    def precheck_commands(self, plan: ConfigPlan) -> list[str]:
-        return []
-
-    def adapt_commands(self, plan, commands, outputs):
-        return commands, []
 
     def prompts(self, command: str) -> list[tuple[str, str]] | None:
         # commit / rollback answer slowly and print "#"-lines: wait for the "[edit]" prompt, not the echo.
         return [] if command.startswith(("commit", "rollback")) else None
-
-    def rollback_setup(self, running_config: str) -> list[str]:
-        return []  # rollback files are built in
 
     # ------------------------------------------------------------ discovery
     def facts_commands(self) -> list[str]:

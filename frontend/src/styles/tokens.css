@@ -49,19 +49,24 @@
 
   --text: #0f1f1a;
   --text-muted: #4a5d56;
-  --text-faint: #6b7d76;
+  /* Light text steps checked for WCAG AA (4.5:1) on the glass surface (Phase 4C) */
+  --text-faint: #5f6e69;
   --text-on-accent: #ffffff;
 
   --accent: #0f9d6b;
-  --accent-strong: #0b7f56;
+  --accent-strong: #0b734f;
+  /* Filled accent (primary buttons, active step): darker than --accent so white text passes 4.5:1 */
+  --accent-fill: #0f8359;
+  --accent-fill-hover: #0b734f;
   --accent-soft: rgba(15, 157, 107, 0.12);
-  --accent-ring: rgba(15, 157, 107, 0.45);
+  --accent-ring: rgba(11, 115, 79, 0.85); /* focus ring: 3:1 against the surface */
 
   --glass: rgba(255, 255, 255, 0.58);
   --glass-strong: rgba(255, 255, 255, 0.78);
   --glass-subtle: rgba(255, 255, 255, 0.36);
   --glass-border: rgba(255, 255, 255, 0.75);
   --glass-edge: rgba(15, 31, 26, 0.08);
+  --input-border: #7d8d87; /* form field edges: 3:1 (WCAG 1.4.11) */
   --sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0) 42%);
   --blur: 22px;
   --saturate: 165%;
@@ -70,9 +75,9 @@
   --shadow-md: 0 1px 2px rgba(15, 31, 26, 0.05), 0 8px 24px rgba(15, 31, 26, 0.08), 0 24px 48px -24px rgba(15, 31, 26, 0.14);
   --shadow-lg: 0 2px 4px rgba(15, 31, 26, 0.05), 0 16px 40px rgba(15, 31, 26, 0.12), 0 40px 80px -40px rgba(15, 31, 26, 0.22);
 
-  --success: #0f9d6b;
+  --success: #0f734f;
   --success-soft: rgba(15, 157, 107, 0.14);
-  --warning: #b45309;
+  --warning: #a54d09;
   --warning-soft: rgba(217, 119, 6, 0.14);
   --danger: #c2410c;
   --danger-strong: #b91c1c;
@@ -117,14 +122,17 @@
   --accent: #34d399;
   --accent-strong: #6ee7b7;
   --accent-soft: rgba(52, 211, 153, 0.14);
-  --accent-ring: rgba(52, 211, 153, 0.5);
+  --accent-ring: rgba(52, 211, 153, 0.75);
   --text-on-accent: #04241a;
+  --accent-fill: #34d399;
+  --accent-fill-hover: #6ee7b7;
 
   --glass: rgba(22, 32, 29, 0.58);
   --glass-strong: rgba(26, 38, 34, 0.84);
   --glass-subtle: rgba(22, 32, 29, 0.38);
   --glass-border: rgba(255, 255, 255, 0.09);
   --glass-edge: rgba(255, 255, 255, 0.06);
+  --input-border: #62746d;
   --sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0) 40%);
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);

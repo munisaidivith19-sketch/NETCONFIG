@@ -61,8 +61,12 @@ describe('Overview', () => {
     expect(screen.getByText(/80% succeeded/)).toBeTruthy()
     const map = screen.getByRole('group', { name: /Network map: 3 devices and 1 links/ })
     expect(within(map).getByRole('button', { name: /sw2, Switch, down/ })).toBeTruthy()
-    expect(within(map).getByRole('button', { name: /core-rtr9, neighbour outside the inventory/ })).toBeTruthy()
-    expect(screen.getByRole('img', { name: /Changes per day/ })).toBeTruthy()
+    const external = within(map).getByRole('button', { name: /core-rtr9, neighbour outside the inventory/ })
+    expect(external.getAttribute('aria-disabled')).toBe('true')
+    // The map is one Tab stop (roving tabindex) and its links are also listed as text.
+    expect(within(map).getAllByRole('button').filter((b) => b.getAttribute('tabindex') === '0')).toHaveLength(1)
+    expect(within(screen.getByRole('list', { name: 'Links' })).getByText(/sw1 Gi0\/1 to sw2 Gi0\/2/)).toBeTruthy()
+    expect(screen.getByRole('img', { name: /Jobs per day/ })).toBeTruthy()
     fireEvent.click(screen.getAllByRole('button', { name: /Show as table/ })[0])
     expect(screen.getAllByRole('row')).toHaveLength(15) // header + 14 days
   })
@@ -96,6 +100,6 @@ describe('Overview', () => {
     renderPage()
     expect(await screen.findByText('No devices yet', { selector: 'strong' })).toBeTruthy()
     expect(screen.getByText('No status checks yet')).toBeTruthy()
-    expect(screen.getByText('No changes yet')).toBeTruthy()
+    expect(screen.getByText('No jobs yet')).toBeTruthy()
   })
 })

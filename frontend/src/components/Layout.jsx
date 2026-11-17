@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   BookOpen,
@@ -53,12 +53,17 @@ function UserMenu() {
   const { user, logout, can } = useAuth()
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
+  const toggle = useRef(null)
+  const panelId = useId()
+  // A disclosure (button + list of links), not an ARIA menu: Tab moves through the links, Escape closes the
+  // panel and puts focus back on the button.
   useEffect(() => {
     if (!open) return undefined
     const close = (e) => {
       if (e.type === 'keydown' && e.key !== 'Escape') return
       if (e.type === 'mousedown' && ref.current?.contains(e.target)) return
       setOpen(false)
+      if (e.type === 'keydown') toggle.current?.focus()
     }
     document.addEventListener('mousedown', close)
     document.addEventListener('keydown', close)
@@ -71,10 +76,11 @@ function UserMenu() {
   return (
     <div className="menu" ref={ref}>
       <button
+        ref={toggle}
         type="button"
         className="btn ghost"
-        aria-haspopup="menu"
         aria-expanded={open}
+        aria-controls={panelId}
         onClick={() => setOpen((v) => !v)}
       >
         <span className="avatar" aria-hidden="true">
@@ -83,21 +89,21 @@ function UserMenu() {
         <span>{user.username}</span>
       </button>
       {open && (
-        <div className="glass strong menu-panel" role="menu">
+        <div className="glass strong menu-panel" id={panelId}>
           <div className="menu-head">
             <strong>{user.username}</strong>
             <div className="faint">Role: {user.role}</div>
           </div>
-          <NavLink to="/account" role="menuitem" onClick={() => setOpen(false)}>
+          <NavLink to="/account" onClick={() => setOpen(false)}>
             <KeyRound size={16} aria-hidden="true" /> Change password
           </NavLink>
           {can('admin') &&
             ADMIN_NAV.map(({ to, label, icon: Icon }) => (
-              <NavLink key={to} to={to} role="menuitem" onClick={() => setOpen(false)}>
+              <NavLink key={to} to={to} onClick={() => setOpen(false)}>
                 <Icon size={16} aria-hidden="true" /> {label}
               </NavLink>
             ))}
-          <button type="button" role="menuitem" onClick={logout}>
+          <button type="button" onClick={logout}>
             <LogOut size={16} aria-hidden="true" /> Sign out
           </button>
         </div>
@@ -130,7 +136,7 @@ export default function Layout() {
             </span>
             <span>
               <strong>NetConfig Studio</strong>
-              <span>Local · 127.0.0.1</span>
+              <span className="brand-sub">Local · 127.0.0.1</span>
             </span>
           </NavLink>
           <nav className="nav">
