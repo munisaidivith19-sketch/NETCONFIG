@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { get } from '../lib/api.js'
 import { useAuth } from '../lib/auth.jsx'
-import { CATEGORIES, CONNECTIONS, TELNET_WARNING } from '../lib/labels.js'
-import { Alert, ErrorNote, Field } from './ui.jsx'
+import { CATEGORIES, CONNECTIONS } from '../lib/labels.js'
+import { Alert, ErrorNote, Field, TelnetAlert } from './ui.jsx'
 
 const EMPTY = {
   name: '',
@@ -200,7 +200,7 @@ export default function DeviceForm({ device, onSubmit, onCancel, submitLabel = '
         </Field>
       </div>
       {method === 'telnet_lab' && (
-        <Alert tone="warning" title="Insecure lab console.">{TELNET_WARNING}</Alert>
+        <TelnetAlert />
       )}
       {tagList.includes('production') && (
         <Alert tone="info"><AlertTriangle size={14} aria-hidden="true" /> Production device: every push needs approval from a second admin.</Alert>

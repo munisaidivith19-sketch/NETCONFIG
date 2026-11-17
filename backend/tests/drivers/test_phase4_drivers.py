@@ -211,3 +211,19 @@ def test_facts_and_neighbors_parsers():
            "Neighbor Port-ID               : 1/1/4\nNeighbor Management-Address    : 10.0.0.1\n"
     assert CX.parse_neighbors({"show lldp neighbor-info detail": lldp}) == [
         {"local": "1/1/1", "remote": "core1", "port": "1/1/4", "ip": "10.0.0.1", "protocol": "lldp"}]
+
+
+def test_junos_start_shell_is_denied():
+    junos = JuniperJunos(ModelInfo(id="x", name="x", category="switch"))
+    assert safety.denied("start shell sh", junos.denylist())
+    assert safety.denied("sta sh", junos.denylist())
+
+
+def test_hidden_default_line_still_fails_when_a_conflicting_line_is_present():
+    from app.drivers.arista_eos import EOS_HIDDEN_DEFAULTS, parse_running_config
+    from app.drivers.common import section_checks
+    cmds = ["interface Ethernet1", "   switchport mode access"]
+    ok = parse_running_config("interface Ethernet1\n   description x\n!\n")
+    bad = parse_running_config("interface Ethernet1\n   switchport mode trunk\n!\n")
+    assert all(c.ok for c in section_checks(cmds, ok, EOS_HIDDEN_DEFAULTS))
+    assert not all(c.ok for c in section_checks(cmds, bad, EOS_HIDDEN_DEFAULTS))

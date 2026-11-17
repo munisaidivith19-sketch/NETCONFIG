@@ -349,11 +349,14 @@ export default function Configure() {
   // heading instead (also once the preview has loaded, because the loading panel is replaced).
   const stepBox = useRef(null)
   const shownStep = useRef(step)
+  const mounted = useRef(false)
   useEffect(() => {
     const changed = shownStep.current !== step
     shownStep.current = step
     const lost = !document.activeElement || document.activeElement === document.body
-    if (!changed && !lost) return
+    const first = !mounted.current
+    mounted.current = true
+    if (first || (!changed && !lost)) return // never steal focus on page load
     const heading = stepBox.current?.querySelector('h2')
     if (!heading) return
     heading.tabIndex = -1

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Ban, CheckCircle2, Circle, CircleX, Loader2, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { post } from '../lib/api.js'
 import { useAuth } from '../lib/auth.jsx'
-import { KIND, NOTE_HINT, NOTE_PATTERN, canCancel, deviceNames, isRunning, isTerminal, phaseStates, statusLabel, statusTone } from '../lib/jobs.js'
+import { FAILED, KIND, NOTE_HINT, NOTE_PATTERN, canCancel, deviceNames, isRunning, isTerminal, phaseStates, statusLabel, statusTone } from '../lib/jobs.js'
 import CodeBlock from './CodeBlock.jsx'
 import RunForm from './RunForm.jsx'
 import { Alert, Badge, ErrorNote, Field, Panel, formatDate } from './ui.jsx'
@@ -46,7 +46,7 @@ function Outcome({ job, step }) {
   if (status === 'success') {
     return <Alert tone="success" title="Done.">The change was applied, verified{job.plan?.save === false ? '' : ' and saved'}.</Alert>
   }
-  if (!err && !['failed', 'blocked', 'rolled_back'].includes(status)) return null
+  if (!err && !FAILED.includes(status)) return null
   const title = { blocked: 'Blocked – nothing was sent.', rolled_back: 'Rolled back – the device is back on its previous configuration.', failed: 'Failed.' }[status] || 'Problem.'
   return (
     <Alert tone={status === 'rolled_back' ? 'warning' : 'danger'} title={title}>

@@ -121,9 +121,14 @@ def section_checks(commands: list[str], run: dict, hidden: frozenset[str] = froz
             if text not in top:
                 checks[head].append(text)
             continue
-        if head is None or text.startswith(("no ", "undo ")) or text in ("exit", "exit-address-family", "end", "quit") \
-                or text in hidden:
+        if head is None or text.startswith(("no ", "undo ")) or text in ("exit", "exit-address-family", "end", "quit"):
             continue
+        if text in hidden:
+            # A default line is only absent when nothing else sets that option: a conflicting line in the
+            # section (e.g. "switchport mode trunk") means the change did not take effect.
+            stem = text.rsplit(" ", 1)[0] + " "
+            if not any(line.startswith(stem) and line != text for line in bodies.get(head, set())):
+                continue
         if text not in bodies.get(head, set()):
             checks[head].append(text)
     return [Check(f"configured: {h}", not missing, "missing: " + "; ".join(missing[:3]) if missing else "")

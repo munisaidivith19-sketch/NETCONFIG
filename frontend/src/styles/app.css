@@ -208,7 +208,7 @@ code, pre, .mono { font-family: var(--font-mono); font-size: 0.86em; }
 .btn:active { transform: translateY(1px); }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
 .btn.primary { background: var(--accent-fill); border-color: transparent; color: var(--text-on-accent); }
-.btn.primary:hover { background: var(--accent-fill-hover); }
+.btn.primary:hover { background: var(--accent-strong); }
 .btn.danger { background: var(--danger-soft); color: var(--danger-strong); border-color: transparent; }
 .btn.ghost { background: transparent; box-shadow: none; border-color: transparent; }
 .btn.ghost:hover { background: var(--neutral-soft); }

@@ -3,6 +3,7 @@
 
 export const RUNNING = ['queued', 'connecting', 'backing_up', 'checking', 'applying', 'verifying', 'saving', 'rolling_back']
 export const TERMINAL = ['success', 'failed', 'rolled_back', 'blocked', 'cancelled', 'expired']
+export const FAILED = ['failed', 'rolled_back', 'blocked']
 export const CANCELLABLE = ['awaiting_approval', 'ready', 'queued', 'connecting', 'backing_up', 'checking']
 
 export const STATUS = {
@@ -47,7 +48,7 @@ export function phaseStates(job, index = 0) {
   const step = job?.steps?.[index]
   const reached = new Set((step?.timeline || []).map((t) => t.state))
   const status = step?.status
-  const bad = ['failed', 'blocked', 'rolled_back', 'rolling_back'].includes(status)
+  const bad = [...FAILED, 'rolling_back'].includes(status)
   const lastReached = [...PHASES].reverse().find(([id]) => reached.has(id))?.[0]
   return PHASES.map(([id, label]) => {
     let state = 'pending'

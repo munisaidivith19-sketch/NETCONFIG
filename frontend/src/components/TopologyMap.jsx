@@ -34,7 +34,7 @@ export function layout(nodes, width = 760) {
     const gap = width / row.length
     row.forEach((n, i) => { pos[n.id] = { x: gap * i + gap / 2, y: 20 + ri * ROW_H + NODE_H / 2, row: ri, col: i } })
   })
-  return { pos, rows, width, height: rows.length * ROW_H - ROW_H + NODE_H + 40 }
+  return { pos, rows, width, height: rows.length ? rows.length * ROW_H - ROW_H + NODE_H + 40 : NODE_H + 40 }
 }
 
 const statusText = (n) => (n.external ? 'not in inventory' : n.reachable === true ? 'up' : n.reachable === false ? 'down' : 'not checked')
@@ -54,7 +54,7 @@ export default function TopologyMap({ nodes, links, selectedId, onSelect }) {
     const p = pos[node.id]
     let target = null
     if (e.key === 'Home') target = rows[0][0]
-    if (e.key === 'End') target = rows[rows.length - 1].at(-1)
+    if (e.key === 'End') target = rows[rows.length - 1]?.at(-1)
     if (e.key === 'ArrowRight') target = rows[p.row][p.col + 1]
     if (e.key === 'ArrowLeft') target = rows[p.row][p.col - 1]
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {

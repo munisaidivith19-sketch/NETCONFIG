@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Activity, AlertTriangle, ClipboardCheck, History, Network, RefreshCw, ScanSearch, Server } from 'lucide-react'
 import { get, post } from '../lib/api.js'
@@ -178,6 +178,9 @@ export default function Overview() {
   // Background refresh keeps the current frame on screen (no flash, no skeleton) and only swaps the numbers.
   const load = useCallback(() => get('/overview').then((d) => { setData(d); setError(null) }).catch(setError), [])
 
+  const recheck = useRef(null) // timer of "Check status now"
+  useEffect(() => () => clearTimeout(recheck.current), [])
+
   useEffect(() => {
     load()
     // No polling while the tab is hidden; coming back refreshes at once.
@@ -193,7 +196,7 @@ export default function Overview() {
     try {
       await post('/overview/refresh')
       setNotice('Checking every device now. The map updates in a few seconds.')
-      setTimeout(() => load().finally(() => setChecking(false)), 5000)
+      recheck.current = setTimeout(() => load().finally(() => setChecking(false)), 5000)
     } catch (err) {
       setError(err)
       setChecking(false)

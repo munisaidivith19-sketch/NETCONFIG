@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Eye, PlugZap } from 'lucide-react'
 import { ConfigureTabs, CreateJob, FinishedJob, JobPreview, useJobWizard } from '../components/Wizard.jsx'
-import { Alert, Checkbox, Empty, ErrorNote, PageHeader, Panel, SelectInput, SkeletonRows, TextInput } from '../components/ui.jsx'
-import { TELNET_WARNING, categoryLabel } from '../lib/labels.js'
+import { Alert, Checkbox, Empty, ErrorNote, PageHeader, Panel, SelectInput, SkeletonRows, TelnetAlert, TextInput } from '../components/ui.jsx'
+import { categoryLabel } from '../lib/labels.js'
 import { bootstrapBody, emptyBootstrap } from '../lib/wizards.js'
 
 const CONSOLE = ['serial', 'telnet_lab']
@@ -62,7 +62,7 @@ export default function Bootstrap() {
                   <SelectInput label="Device" value={form.device_id} onChange={(v) => set('device_id', v)} error={errors.device_id}
                     options={[['', 'Choose a device…'], ...consoles.map((d) => [d.id, `${d.name} · ${categoryLabel(d.category)} · ${consoleLabel(d)}`])]} />
                   {device?.connection?.method === 'telnet_lab' && (
-                    <Alert tone="warning" title="Insecure lab console.">{TELNET_WARNING}</Alert>
+                    <TelnetAlert />
                   )}
                   <div className="form-grid">
                     <TextInput maxLength={80} label="Hostname" value={form.hostname} onChange={(v) => set('hostname', v)} error={e('hostname')} maxLength={63} />

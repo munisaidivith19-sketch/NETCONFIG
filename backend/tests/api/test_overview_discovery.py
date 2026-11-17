@@ -242,3 +242,11 @@ def test_topology_draws_an_uplink_once_and_keeps_unnamed_neighbours_apart():
     assert len(between) == 1 and between[0]["source"] == "lldp"
     unknown = [n for n in topo["nodes"] if n["external"]]
     assert len(unknown) == 2  # one per device port, not one shared fake node
+
+
+def test_status_history_keeps_the_newest_sample(db):
+    from app.api.overview import MAX_SAMPLES, _status_history
+    now = clock.now()
+    db.status_samples.insert_many([{"at": now - timedelta(minutes=1000 - i), "up": i} for i in range(1000)])
+    rows = _status_history(db, now)
+    assert len(rows) <= MAX_SAMPLES and rows[-1]["up"] == 999 and rows[0]["up"] == 0

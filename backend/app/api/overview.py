@@ -44,7 +44,12 @@ def _job_days(db: Database, now) -> list[dict]:
 def _status_history(db: Database, now) -> list[dict]:
     rows = list(db.status_samples.find({"at": {"$gte": now - timedelta(hours=24)}}, {"_id": 0}).sort("at", 1))
     step = max(1, -(-len(rows) // MAX_SAMPLES))  # ceiling: at most MAX_SAMPLES rows that still span all 24 h
-    return rows[::step]
+    if not rows:
+        return rows
+    keep = sorted(set(range(len(rows) - 1, -1, -step)) | {0})  # counted from the newest sample; the oldest stays too
+    if len(keep) > MAX_SAMPLES:
+        del keep[1]
+    return [rows[i] for i in keep]
 
 
 def _port_key(name: str | None) -> str:

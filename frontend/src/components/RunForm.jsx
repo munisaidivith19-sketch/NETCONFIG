@@ -2,8 +2,7 @@ import { useState } from 'react'
 import { Play, ShieldAlert } from 'lucide-react'
 import { post } from '../lib/api.js'
 import { checkNewSecret, needsLogin, secretsNeeded } from '../lib/jobs.js'
-import { TELNET_WARNING } from '../lib/labels.js'
-import { Alert, ErrorNote, Field } from './ui.jsx'
+import { Alert, ErrorNote, Field, TelnetAlert } from './ui.jsx'
 
 const EMPTY = {
   username: '', password: '', enable_secret: '',
@@ -84,7 +83,7 @@ export default function RunForm({ job, onStarted }) {
         ends. They are not saved in the database, the logs or this browser.
       </Alert>
       {methods.has('telnet_lab') && (
-        <Alert tone="warning" title="Insecure lab console.">{TELNET_WARNING}</Alert>
+        <TelnetAlert />
       )}
       {!loginRequired && (
         <Alert tone="info">Console connection: leave the login empty if the device has none yet (a new device).</Alert>

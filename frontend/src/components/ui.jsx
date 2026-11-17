@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef } from 'react'
 import { AlertTriangle, CheckCircle2, Info, OctagonAlert } from 'lucide-react'
+import { TELNET_WARNING } from '../lib/labels.js'
 
 export function PageHeader({ title, subtitle, children }) {
   return (
@@ -139,6 +140,8 @@ export function Alert({ tone = 'info', title, children }) {
     </div>
   )
 }
+
+export const TelnetAlert = () => <Alert tone="warning" title="Insecure lab console.">{TELNET_WARNING}</Alert>
 
 export function Empty({ icon: Icon, title, children, action }) {
   return (

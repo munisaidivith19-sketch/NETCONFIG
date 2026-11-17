@@ -143,7 +143,7 @@ class JuniperJunos(DriverDefaults):
         if plan.ssh:
             s = plan.ssh
             pw = secret_value(s.password, kind)  # Junos gets a $6$ hash, never the password itself
-            hashed = MASK if pw == MASK else f'"{sha512_crypt(pw)}"'
+            hashed = MASK if kind == "preview" else f'"{sha512_crypt(pw)}"'
             out += [f"set system login user {s.username} class super-user",
                     f"set system login user {s.username} authentication encrypted-password {hashed}",
                     "set system services ssh protocol-version v2"]
@@ -306,7 +306,7 @@ class JuniperJunos(DriverDefaults):
         # Only the push engine commits, rolls back or leaves the private session. "delete" is denied globally.
         return [(("commit",), "commit"), (("rollback",), "rollback"), (("load",), "load"),
                 (("deactivate",), "deactivate"), (("exit",), "exit"), (("quit",), "quit"), (("top",), "top"),
-                (("edit",), "edit"), (("request",), "request"), (("run",), "run"), (("replace",), "replace"),
+                (("edit",), "edit"), (("request",), "request"), (("start", "shell"), "start shell"), (("run",), "run"), (("replace",), "replace"),
                 (("rename",), "rename"), (("copy",), "copy"), (("insert",), "insert"), (("wildcard",), "wildcard"),
                 # A configuration group applies its settings anywhere, past the management-port checks.
                 (("set", "groups"), "set groups"), (("set", "apply-groups"), "set apply-groups")]

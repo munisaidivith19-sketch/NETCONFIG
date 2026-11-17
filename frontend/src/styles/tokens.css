@@ -57,7 +57,6 @@
   --accent-strong: #0b734f;
   /* Filled accent (primary buttons, active step): darker than --accent so white text passes 4.5:1 */
   --accent-fill: #0f8359;
-  --accent-fill-hover: #0b734f;
   --accent-soft: rgba(15, 157, 107, 0.12);
   --accent-ring: rgba(11, 115, 79, 0.85); /* focus ring: 3:1 against the surface */
 
@@ -124,8 +123,7 @@
   --accent-soft: rgba(52, 211, 153, 0.14);
   --accent-ring: rgba(52, 211, 153, 0.75);
   --text-on-accent: #04241a;
-  --accent-fill: #34d399;
-  --accent-fill-hover: #6ee7b7;
+  --accent-fill: var(--accent);
 
   --glass: rgba(22, 32, 29, 0.58);
   --glass-strong: rgba(26, 38, 34, 0.84);
