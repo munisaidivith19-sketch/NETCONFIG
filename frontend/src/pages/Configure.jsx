@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Boxes, CheckCircle2, ClipboardCheck, KeyRound, Layers, Server, ShieldCheck } from 'lucide-react'
+import AiDraft from '../components/AiDraft.jsx'
 import CodeBlock from '../components/CodeBlock.jsx'
+import Explain from '../components/Explain.jsx'
 import JobView from '../components/JobView.jsx'
 import PlanForm from '../components/PlanForm.jsx'
 import TemplateBar from '../components/TemplateBar.jsx'
@@ -206,7 +208,10 @@ function PreviewStep({ preview, multi, error, loading, onRetry, goFix }) {
         ) : preview.commands.length === 0 ? (
           <Empty icon={ClipboardCheck} title="Nothing to send">Add at least one requirement.</Empty>
         ) : (
-          <CodeBlock lines={preview.commands} label={`${preview.commands.length} configuration commands (secrets masked)`} />
+          <>
+            <CodeBlock lines={preview.commands} label={`${preview.commands.length} configuration commands (secrets masked)`} />
+            <Explain kind="commands" text={preview.commands.join('\n')} />
+          </>
         )}
       </Panel>
       <div className="stack">
@@ -346,11 +351,12 @@ export default function Configure() {
 
   // Focus management between steps: the button that was clicked usually disappears with the old step, which
   // would drop keyboard and screen-reader users at the top of the page. Move focus to the new step's first
-  // heading instead (also once the preview has loaded, because the loading panel is replaced).
+  // heading instead (also once the preview has loaded, because the loading panel is replaced). A layout effect, so
+  // focus moves in the same commit that shows the step (never a frame later, and before any other update).
   const stepBox = useRef(null)
   const shownStep = useRef(step)
   const mounted = useRef(false)
-  useEffect(() => {
+  useLayoutEffect(() => {
     const changed = shownStep.current !== step
     shownStep.current = step
     const lost = !document.activeElement || document.activeElement === document.body
@@ -392,6 +398,7 @@ export default function Configure() {
                 <Alert tone="warning">The {target.os} driver is experimental: check the preview carefully and test in a lab first.</Alert>
               )}
               {Object.keys(errors).length > 0 && <Alert tone="danger">Some fields need attention; they are marked below.</Alert>}
+              <AiDraft setForm={updateForm} caps={target.capabilities} category={target.kind === 'multi' ? null : target.model.category} />
               <TemplateBar form={form} setForm={updateForm} osId={target.model.os_driver?.id || target.model.os_id} />
               <PlanForm form={form} setForm={updateForm} caps={target.capabilities} errors={errors} production={target.production} portHint={portHint}
                 category={target.kind === 'multi' ? null : target.model.category} />

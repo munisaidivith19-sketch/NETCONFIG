@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__, errors
+from .api import ai as ai_api
 from .api import audit as audit_api
 from .api import auth, catalog, devices, health, hostkeys, jobs, overview, plans, templates, users
 from .config import Settings
@@ -24,7 +25,7 @@ from .services.status import StatusPoller
 log = logging.getLogger("netconfig")
 
 ROUTERS = [health.router, auth.router, users.router, audit_api.router, catalog.router, devices.router, plans.router,
-           jobs.router, hostkeys.router, templates.router, overview.router]
+           jobs.router, hostkeys.router, templates.router, overview.router, ai_api.router]
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

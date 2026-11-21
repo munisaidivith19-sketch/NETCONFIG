@@ -3,11 +3,27 @@ import { Ban, CheckCircle2, Circle, CircleX, Loader2, ThumbsDown, ThumbsUp } fro
 import { post } from '../lib/api.js'
 import { useAuth } from '../lib/auth.jsx'
 import { FAILED, KIND, NOTE_HINT, NOTE_PATTERN, canCancel, deviceNames, isRunning, isTerminal, phaseStates, statusLabel, statusTone } from '../lib/jobs.js'
+import BackupDiff from './BackupDiff.jsx'
 import CodeBlock from './CodeBlock.jsx'
+import Explain from './Explain.jsx'
 import RunForm from './RunForm.jsx'
 import { Alert, Badge, ErrorNote, Field, Panel, formatDate } from './ui.jsx'
 
 const PHASE_ICON = { done: CheckCircle2, active: Loader2, failed: CircleX, pending: Circle }
+const TRANSCRIPT_TAIL = 40 // device lines sent with a failure (the backend masks them and treats them as untrusted)
+
+/** What went wrong on one device, as text for the assistant: the error, failed checks and the end of the session. */
+function failureText(step) {
+  const failed = (step.checks || []).filter((c) => !c.ok && c.required !== false)
+  if (!step.error && !failed.length) return ''
+  return [
+    `Status: ${step.status}`,
+    step.error?.message && `Error: ${step.error.message}`,
+    step.error?.command && `Command: ${step.error.command}`,
+    ...failed.map((c) => `Failed check: ${c.name} – ${c.detail}`),
+    step.output && `Last lines of the device session:\n${step.output.split('\n').slice(-TRANSCRIPT_TAIL).join('\n')}`,
+  ].filter(Boolean).join('\n')
+}
 
 export function StatusBadge({ status }) {
   return <Badge tone={statusTone(status)} dot={isRunning(status)}>{statusLabel(status)}</Badge>
@@ -202,6 +218,7 @@ export default function JobView({ job, setJob }) {
           {many && <h3 style={{ margin: 0 }}>{step.role ? `Side ${step.role}: ` : ''}{step.device_name}</h3>}
           {step.timeline.some((t) => t.state === 'connecting') && <JobProgress job={job} index={index} />}
           {started && <Outcome job={job} step={step} />}
+          {started && FAILED.includes(step.status) && <Explain kind="verification" text={failureText(step)} />}
           {step.notes?.length > 0 && (
             <ul className="stack" style={{ margin: 0, paddingLeft: 'var(--space-5)' }} aria-label="Notes">
               {step.notes.map((n, i) => <li key={i} className={n.includes('MANUAL ACTION') ? 'text-danger' : 'muted'}>{n}</li>)}
@@ -226,6 +243,7 @@ export default function JobView({ job, setJob }) {
       <div className="grid two">
         <Panel title="Commands" subtitle={`${many ? `${step.device_name} · ` : ''}secrets masked.`}>
           <CodeBlock lines={commands} label={`${commands.length} configuration commands`} />
+          <Explain kind="commands" text={commands.join('\n')} />
           {step.warnings?.length > 0 && step.warnings.map((w) => <Alert key={w} tone="warning">{w}</Alert>)}
         </Panel>
         <Panel title="Device session" subtitle="Everything sent and received (masked).">
@@ -242,6 +260,12 @@ export default function JobView({ job, setJob }) {
               <summary>Show the backup taken before the change ({backupLines.length} lines)</summary>
               {/* A running config has thousands of lines: rendered only while open, not on every poll. */}
               {backupOpen && <CodeBlock lines={backupLines} label="Running config backup (masked)" />}
+            </details>
+          )}
+          {step.backup && step.device_id && (
+            <details>
+              <summary>Compare with the previous backup of this device</summary>
+              <BackupDiff job={job} step={step} />
             </details>
           )}
         </Panel>

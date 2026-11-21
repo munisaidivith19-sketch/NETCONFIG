@@ -1,8 +1,9 @@
 import { memo, useState } from 'react'
 import { Copy } from 'lucide-react'
 
-/** Numbered, copyable block of commands or device output (already masked by the backend). */
-function CodeBlock({ lines, label, empty = 'Nothing here.' }) {
+/** Numbered, copyable block of commands or device output (already masked by the backend). lineClass(line) adds a
+ * class to a line (the config diff colours + and - lines). */
+function CodeBlock({ lines, label, empty = 'Nothing here.', lineClass }) {
   const [copied, setCopied] = useState(false)
   async function copy() {
     try {
@@ -28,7 +29,7 @@ function CodeBlock({ lines, label, empty = 'Nothing here.' }) {
       ) : (
         <pre className="code" aria-label={label} tabIndex={0}>
           {lines.map((l, i) => (
-            <span className="line" key={i}>{l || ' '}</span>
+            <span className={lineClass ? `line ${lineClass(l)}` : 'line'} key={i}>{l || ' '}</span>
           ))}
         </pre>
       )}

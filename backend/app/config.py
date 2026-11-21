@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     simulate_devices: bool = False
     # Background ping + port check of every device with a management address (0 turns it off).
     status_poll_seconds: int = Field(default=60, ge=0, le=86400)
+    # AI assistant (Phase 5A, optional). Free options only: local Ollama or a hosted free tier. "off" sends nothing.
+    ai_provider: Literal["off", "ollama", "groq", "gemini"] = "off"
+    ai_api_key: SecretStr | None = None
+    ai_model: str = Field(default="", max_length=80, pattern=r"^[A-Za-z0-9._:-]*$")  # "" = the provider default
+    ai_timeout_seconds: int = Field(default=30, ge=5, le=120)
     frontend_dist: Path = BACKEND_DIR.parent / "frontend" / "dist"
 
     @property

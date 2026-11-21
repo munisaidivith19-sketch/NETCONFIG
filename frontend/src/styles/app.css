@@ -235,6 +235,7 @@ code, pre, .mono { font-family: var(--font-mono); font-size: 0.86em; }
   transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
 }
 .textarea { padding: var(--space-3); min-height: 96px; resize: vertical; font-family: var(--font-mono); font-size: var(--text-sm); }
+.textarea.prose { font-family: var(--font-sans); font-size: var(--text-md); min-height: 72px; }
 .input:focus, .select:focus, .textarea:focus { outline: none; border-color: var(--accent); box-shadow: var(--focus); }
 .input[aria-invalid='true'], .select[aria-invalid='true'] { border-color: var(--danger-strong); }
 
@@ -342,6 +343,9 @@ tr.clickable:hover td, tr.selected td { background: var(--neutral-soft); }
   user-select: none;
 }
 .code .comment { color: var(--text-faint); }
+/* Config diff: added / removed lines (the +/- sign is in the text too, so colour is never the only cue). */
+.code .line.add { background: var(--success-soft); color: var(--success); }
+.code .line.del { background: var(--danger-soft); color: var(--danger-strong); }
 
 /* ---------- Alerts / empty states ---------- */
 
@@ -699,3 +703,15 @@ details[open] > summary { margin-bottom: var(--space-3); }
 .recent-list li:last-child { border-bottom: 0; }
 .recent-list a { font-weight: var(--weight-medium); color: var(--text); min-height: 44px; display: inline-flex; align-items: center; }
 .recent-list .faint { flex-basis: 100%; font-size: var(--text-xs); }
+
+/* ---------- AI assistant ---------- */
+
+.ai-answer {
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--glass-subtle);
+  border: 1px solid var(--glass-edge);
+  border-left: 3px solid var(--accent);
+}
+.ai-note { margin: 0 0 var(--space-2); font-size: var(--text-sm); }
+.ai-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }

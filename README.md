@@ -116,6 +116,17 @@ Every page was reviewed in light and dark themes, at desktop and 375 px phone wi
 - **Rendered check:** the production build was loaded in headless Edge: 12 pages × 2 themes × 2 widths =
   48 views. All pass: no horizontal scroll, no console or CSP errors, every control at least 44 px.
 
+## AI assistant (Phase 5A, optional)
+Off by default. Set `AI_PROVIDER` in `backend\.env` to `ollama` (runs on this PC, free, no key), `groq` or
+`gemini` (free tiers, need `AI_API_KEY`), then restart.
+- **Describe what you need** (Configure → Requirements): a sentence becomes a plan draft that fills the form.
+  The draft is validated, previewed, safety-checked and approved like any plan. It never includes SSH logins
+  or custom commands, and nothing is pushed by the AI.
+- **Explain** buttons: preview and job commands, a failed push, and "Compare with the previous backup" in a
+  job.
+- Texts are masked before they are sent, and device output is treated as untrusted (prompt injection).
+  Engineers only, 10 requests per minute. Details: `docs/AI_ASSISTANT.md`.
+
 ## Tests
 ```powershell
 cd backend;  .venv\Scripts\python -m pytest          # needs MongoDB running (uses database netconfig_test)
@@ -172,5 +183,6 @@ scripts/   Windows helper scripts
 | 4 | 4A Arista, Juniper, Aruba drivers; experimental MikroTik, Huawei, D-Link, TP-Link; APs and cameras | done (all drivers experimental until `docs/LAB_TESTING.md` Part B passes) |
 | 4 | 4B status polling, read-only discovery, topology, live Overview | done (SNMPv3 not built: needs approval for `pysnmp`) |
 | 4 | 4C UI quality pass (contrast, keyboard, phone width, copy; see `docs/UI_REVIEW.md`) | done |
-| 4 | 4D review | – |
-| 5 | AI assistant, hardening, docs, release | – |
+| 4 | 4D review | done |
+| 5 | 5A AI assistant (Ollama / Groq / Gemini; draft + explain) | done (not yet tried against a live provider) |
+| 5 | 5B hardening, 5C docs and release | – |

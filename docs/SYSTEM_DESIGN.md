@@ -404,7 +404,8 @@ All routes are under `/api`. JSON only. Auth is the session cookie. State-changi
 | POST | `/devices/{id}/discover` | E | device login in the body (used once, never stored) → runs read-only `show` commands; stores facts, OS/model match, neighbours, VLANs; 409 while a push holds the device lock; 10/min |
 | GET | `/overview` | V | KPIs, jobs per day (14 d), status history (24 h), devices by category, topology `{nodes, links}`, recent jobs |
 | POST | `/overview/refresh` | E | wakes the status poller; 409 when `STATUS_POLL_SECONDS=0`; 6/min |
-| POST | `/ai/draft`, `/ai/explain` | E | Phase 5, optional |
+| GET | `/ai/status` | V | `{enabled, provider, model}`; the UI hides AI controls when off |
+| POST | `/ai/draft`, `/ai/explain` | E | optional (`AI_PROVIDER`); draft → validated plan JSON, never a job; explain → plain text; masked input, untrusted-data delimiters; 10/min shared; see `docs/AI_ASSISTANT.md` |
 
 **Errors:** `{ "error": { "code": "validation_error", "message": "…", "fields": {"vlans.0.id": "…"}, "request_id": "…" } }`.
 There are never stack traces. Viewers get `403`, missing sessions get `401`, and wrong Host or Origin

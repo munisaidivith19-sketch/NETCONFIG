@@ -53,6 +53,9 @@ EXPECTED_ROLES = {
     ("GET", "/api/hostkeys"): "admin",
     ("POST", "/api/hostkeys/{key_id}/accept"): "admin",
     ("DELETE", "/api/hostkeys/{key_id}"): "admin",
+    ("GET", "/api/ai/status"): "viewer",
+    ("POST", "/api/ai/draft"): "engineer",
+    ("POST", "/api/ai/explain"): "engineer",
 }
 
 
