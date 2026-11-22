@@ -94,7 +94,11 @@ def users(db, settings):
 
 def login(client: TestClient, username: str) -> TestClient:
     r = client.post("/api/auth/login", json={"username": username, "password": PASSWORDS[username]})
-    assert r.status_code == 200, r.text
+    if r.status_code != 200:  # the API answers generically on purpose; the audit log has the real reason
+        db = client.app.state.db
+        why = db.audit_log.find_one({"action": "auth.login", "result": "denied"}, sort=[("seq", -1)])
+        user = db.users.find_one({"username": username}, {"password_hash": 0})
+        raise AssertionError(f"login {username} failed: {r.text}; audit={why and why.get('details')}; user={user}")
     return client
 
 

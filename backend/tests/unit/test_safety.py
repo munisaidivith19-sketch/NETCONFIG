@@ -117,3 +117,20 @@ def test_preview_without_known_mgmt_interface_still_checks_vty():
 def test_one_violation_per_line():
     v = mgmt(["interface Vlan1", " shutdown"])
     assert len(v) == 1 and v[0].index == 1 and "management" in v[0].message
+
+
+CISCO_EXTRA = CiscoIos(ModelInfo(id="x", name="x", category="switch")).denylist()
+
+
+@pytest.mark.parametrize("command", [
+    # Phase 5B security review: a stored command ("action 1.0 reload") does not start with the denied word
+    "event manager applet x", "ev man applet x", "do event manager run x", "kron policy-list p",
+    "kron occurrence o in 1 oneshot", "alias exec x reload",
+])
+def test_cisco_deferred_execution_blocked(command):
+    assert check_denylist([command], CISCO_EXTRA), command
+
+
+@pytest.mark.parametrize("command", ALLOWED)
+def test_cisco_extra_rules_keep_allowed_commands(command):
+    assert not check_denylist([command], CISCO_EXTRA), command

@@ -28,7 +28,10 @@ class Settings(BaseSettings):
     session_cookie: str = "ncs_session"
     session_absolute_hours: int = 8
     session_idle_minutes: int = 30
-    cookie_secure: bool = False  # set true when serving over HTTPS (ALLOW_REMOTE)
+    cookie_secure: bool = False  # always on when SSL_CERTFILE/SSL_KEYFILE are set
+    # HTTPS: PEM certificate and private key served by uvicorn. Required to listen beyond localhost (CLAUDE.md 8.1).
+    ssl_certfile: Path | None = None
+    ssl_keyfile: Path | None = None
 
     bcrypt_rounds: int = Field(default=12, ge=12, le=16)
     lockout_threshold: int = 5
@@ -53,6 +56,14 @@ class Settings(BaseSettings):
         return self.env == "production"
 
     @property
+    def https(self) -> bool:
+        return self.ssl_certfile is not None and self.ssl_keyfile is not None
+
+    @property
+    def secure_cookies(self) -> bool:
+        return self.cookie_secure or self.https
+
+    @property
     def allowed_hosts(self) -> set[str]:
         hosts = {f"127.0.0.1:{self.port}", f"localhost:{self.port}", f"[::1]:{self.port}"}
         if self.allow_remote and self.host not in LOCAL_HOSTS:
@@ -61,7 +72,7 @@ class Settings(BaseSettings):
 
     @property
     def allowed_origins(self) -> set[str]:
-        scheme = "https" if self.cookie_secure else "http"
+        scheme = "https" if self.secure_cookies else "http"
         origins = {f"{scheme}://{h}" for h in self.allowed_hosts}
         if not self.is_production:
             origins.add(self.dev_origin)
@@ -72,9 +83,19 @@ class Settings(BaseSettings):
             raise RuntimeError("SIMULATE_DEVICES=true is not allowed with ENV=production.")
 
     def check_bind_address(self) -> None:
-        """Refuse to listen beyond localhost unless ALLOW_REMOTE is set (CLAUDE.md 8.1)."""
-        if self.host not in LOCAL_HOSTS and not self.allow_remote:
+        """Listening beyond localhost needs ALLOW_REMOTE=true *and* HTTPS (CLAUDE.md 8.1); login is always on."""
+        if self.host in LOCAL_HOSTS:
+            return
+        if not self.allow_remote:
             raise RuntimeError(
-                f"Refusing to bind to {self.host}: set ALLOW_REMOTE=true (and use HTTPS) "
+                f"Refusing to bind to {self.host}: set ALLOW_REMOTE=true, SSL_CERTFILE and SSL_KEYFILE "
                 "to listen on a non-localhost address."
             )
+        if not self.https:
+            raise RuntimeError(
+                f"Refusing to bind to {self.host} without HTTPS: set SSL_CERTFILE and SSL_KEYFILE "
+                "(PEM certificate and key)."
+            )
+        missing = [str(p) for p in (self.ssl_certfile, self.ssl_keyfile) if not p.is_file()]
+        if missing:
+            raise RuntimeError("HTTPS file not found: " + ", ".join(missing))

@@ -10,7 +10,7 @@ from ..errors import ApiError
 
 
 class StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, strict=False)
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, strict=True)
 
 
 Username = Annotated[str, StringConstraints(min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_.-]+$")]

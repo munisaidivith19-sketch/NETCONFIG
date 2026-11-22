@@ -37,7 +37,7 @@ DOCS_CSP = (
 DOCS_PATHS = ("/docs", "/redoc", "/openapi.json")
 
 
-def security_headers(path: str) -> list[tuple[bytes, bytes]]:
+def security_headers(path: str, https: bool = False) -> list[tuple[bytes, bytes]]:
     csp = DOCS_CSP if path.startswith(DOCS_PATHS) else CSP
     headers = [
         (b"content-security-policy", csp.encode()),
@@ -50,6 +50,8 @@ def security_headers(path: str) -> list[tuple[bytes, bytes]]:
     ]
     if path.startswith("/api/"):
         headers.append((b"cache-control", b"no-store"))
+    if https:
+        headers.append((b"strict-transport-security", b"max-age=31536000"))
     return headers
 
 
@@ -68,7 +70,7 @@ class LocalhostGuard:
         rid = secrets.token_hex(8)
         scope.setdefault("state", {})["request_id"] = rid
         path = scope.get("path", "")
-        extra = security_headers(path) + [(b"x-request-id", rid.encode())]
+        extra = security_headers(path, self.settings.https) + [(b"x-request-id", rid.encode())]
 
         async def send_with_headers(message: Message) -> None:
             if message["type"] == "http.response.start":

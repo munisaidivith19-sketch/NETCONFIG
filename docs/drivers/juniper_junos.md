@@ -89,5 +89,6 @@ into `encrypted-password` locks the account. The driver therefore computes a SHA
   (U **[LAB]**). `warning:` lines are informational.
 - Extra denylist (custom commands): `commit`, `rollback`, `load`, `deactivate`, `exit`, `quit`, `top`, `edit`,
   `request`, `run`, `replace`, `rename`, `copy`, `insert`, `wildcard`. A bare `delete` is already denied
-  globally (CLAUDE.md 8.5).
+  globally (CLAUDE.md 8.5). Also `start shell`, `set groups`, `set apply-groups`, and (Phase 5B)
+  `set event-options` and `set system scripts`, which run commands later.
 - Discovery (Phase 4B): `show version`, `show chassis hardware`, `show lldp neighbors` (U **[LAB]**).

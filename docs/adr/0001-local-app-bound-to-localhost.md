@@ -65,7 +65,7 @@ is never treated as the security control itself.
 - Revisit: a team deployment (Option C) if multi-user need grows; this requires TLS and a review of ADR-0004.
 
 ## Action Items
-1. [ ] `HOST=127.0.0.1` default in `config.py`; refuse other hosts unless `ALLOW_REMOTE=true`.
-2. [ ] Implement HostAllowlist and OriginAndCustomHeader middleware (Phase 1B).
-3. [ ] Security tests: wrong Host, cross-origin POST and missing custom header are all rejected.
-4. [ ] Explain DNS rebinding and CSRF-to-localhost in `docs/SECURITY.md`.
+1. [x] `HOST=127.0.0.1` default in `config.py`; refuse other hosts unless `ALLOW_REMOTE=true`.
+2. [x] Implement HostAllowlist and OriginAndCustomHeader middleware (Phase 1B).
+3. [x] Security tests: wrong Host, cross-origin POST and missing custom header are all rejected.
+4. [x] Explain DNS rebinding and CSRF-to-localhost in `docs/SECURITY.md`.

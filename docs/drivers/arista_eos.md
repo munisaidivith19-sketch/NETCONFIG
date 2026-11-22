@@ -81,7 +81,8 @@ subnet, so the backend validation rejects both cases before preview.
   `% Unavailable command`, `% Error`, `% Maximum number` (C – from a third-party driver template **[LAB]**).
   Lines starting with `! ` are warnings, not errors.
 - Extra denylist (custom commands): `configure session`, `commit`, `abort`, `rollback` – only the engine opens,
-  commits or aborts a session.
+  commits or aborts a session. Also `end`, `bash`, and (Phase 5B) `event-handler`, `schedule`, `alias` and
+  `daemon`: they store a command or a Linux program that runs later, past the denylist.
 - Discovery (Phase 4B): `show version`, `show hostname`, `show lldp neighbors detail` (U **[LAB]**).
 - Netmiko `arista_eos` (4.8.0) has no commit helper: the engine sends the session commands itself and gives
   each one an expect string ([research/netmiko.md](research/netmiko.md) Q3, Q5).

@@ -1,5 +1,7 @@
 """Authentication, sessions, lockout, RBAC (TEST_PLAN S9–S15, S20–S21)."""
 
+import re
+
 import pytest
 from fastapi import APIRouter
 from fastapi.routing import APIRoute
@@ -91,8 +93,9 @@ def test_nested_router_fails_closed():
 
 
 def _call(client, method, path):
-    path = path.replace("{user_id}", "0" * 24).replace("{device_id}", "0" * 24).replace("{model_id}", "none")
-    path = path.replace("{job_id}", "0" * 24).replace("{key_id}", "0" * 24)
+    # Every {..._id} becomes a well-formed id that does not exist, so the only possible refusal is the role check.
+    path = re.sub(r"\{[a-z_]+\}", "0" * 24, path.replace("{model_id}", "none"))
+    assert "{" not in path
     return client.request(method, path, json={} if method in ("POST", "PATCH") else None)
 
 
@@ -158,6 +161,18 @@ def test_lockout_after_five_failures(client, users, fake_clock):
     assert client.post("/api/auth/login", json=good).status_code == 401
     fake_clock.advance(seconds=2)
     assert client.post("/api/auth/login", json=good).status_code == 200
+
+
+def test_lockout_counts_parallel_failures(db, settings, users, monkeypatch):
+    """Each wrong guess is counted in the database ($inc). A read-add-write counter would let parallel guesses
+    (all reading failed_logins=0) overwrite each other and never lock the account."""
+    from app.services import users as users_service
+
+    stale = db.users.find_one({"username": "viewer"})  # what every parallel request read before checking
+    monkeypatch.setattr(users_service, "find_by_username", lambda _db, _name: dict(stale))
+    results = [users_service.authenticate(db, settings, "viewer", "Wrong-password-1")[1] for _ in range(5)]
+    assert results == ["bad_password"] * 4 + ["locked_now"]
+    assert db.users.find_one({"username": "viewer"})["locked_until"] is not None
 
 
 def test_login_rate_limited(client, users):

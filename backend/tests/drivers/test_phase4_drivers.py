@@ -178,6 +178,11 @@ def test_aoscx_management_interface_and_protection():
     # Phase 4D security review: shells, leaving the EOS session, Junos configuration groups
     (EOS, "bash sudo shutdown -r now"), (EOS, "end"), (CX, "start-shell"),
     (JUNOS, "set groups G interfaces ge-0/0/0 disable"), (JUNOS, "set apply-groups G"),
+    # Phase 5B security review: features that run a stored command later
+    (EOS, "event-handler x"), (EOS, "schedule x interval 1 max-log-files 1 command bash sudo reboot"),
+    (EOS, "alias x bash"), (EOS, "daemon x"), (EOS, "do event-handler x"),
+    (JUNOS, "set event-options policy p events e then execute-commands commands x"),
+    (JUNOS, "set system scripts op file x.slax"),
 ])
 def test_driver_denylist(drv, command):
     assert safety.check_denylist([command], drv.denylist())

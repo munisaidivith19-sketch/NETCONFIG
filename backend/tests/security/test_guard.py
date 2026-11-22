@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import create_app
-from tests.conftest import BASE_URL, make_settings
+from tests.conftest import BASE_URL, HEADERS, PASSWORDS, make_settings
 
 
 def test_wrong_host_rejected_get_and_post(client):
@@ -128,10 +128,35 @@ def test_unhandled_exception_is_safe(app, users):
     assert r.json()["error"]["request_id"]
 
 
-def test_refuses_non_local_bind_without_allow_remote():
-    with pytest.raises(RuntimeError):
+def test_refuses_non_local_bind_without_allow_remote_and_https(tmp_path):
+    cert, key = tmp_path / "cert.pem", tmp_path / "key.pem"
+    with pytest.raises(RuntimeError, match="ALLOW_REMOTE"):
         make_settings(host="0.0.0.0").check_bind_address()  # noqa: S104
-    make_settings(host="0.0.0.0", allow_remote=True).check_bind_address()  # noqa: S104
+    with pytest.raises(RuntimeError, match="without HTTPS"):
+        make_settings(host="0.0.0.0", allow_remote=True).check_bind_address()  # noqa: S104
+    with pytest.raises(RuntimeError, match="not found"):
+        make_settings(host="0.0.0.0", allow_remote=True, ssl_certfile=cert,  # noqa: S104
+                      ssl_keyfile=key).check_bind_address()
+    cert.write_text("cert")
+    key.write_text("key")
+    remote = make_settings(host="192.168.1.10", allow_remote=True, ssl_certfile=cert, ssl_keyfile=key)
+    remote.check_bind_address()
+    assert remote.secure_cookies and "https://192.168.1.10:8000" in remote.allowed_origins
+    assert not any(o.startswith("http://") for o in remote.allowed_origins if "5173" not in o)
+    make_settings(host="127.0.0.1").check_bind_address()  # localhost never needs any of it
+
+
+def test_https_sends_hsts_and_secure_cookie(db, users, tmp_path):
+    cert, key = tmp_path / "cert.pem", tmp_path / "key.pem"
+    settings = make_settings(ssl_certfile=cert, ssl_keyfile=key)  # localhost + HTTPS (files checked only remotely)
+    with TestClient(create_app(settings), base_url="https://127.0.0.1:8000", headers=HEADERS) as c:
+        r = c.post("/api/auth/login", json={"username": "engineer", "password": PASSWORDS["engineer"]},
+                   headers={"Origin": "https://127.0.0.1:8000"})
+        assert r.status_code == 200, r.text
+        assert "max-age=" in r.headers["strict-transport-security"]
+        assert "secure" in r.headers["set-cookie"].lower()
+        r = c.post("/api/auth/logout", headers={"Origin": "http://127.0.0.1:8000"})
+        assert r.status_code == 403  # the plain-http origin is no longer accepted
 
 
 def test_frontend_served_with_spa_fallback_and_no_docs_in_production(db, tmp_path):
@@ -145,3 +170,14 @@ def test_frontend_served_with_spa_fallback_and_no_docs_in_production(db, tmp_pat
         assert prod.get(path).status_code == 404, path
     assert prod.get("/../backend/.env").status_code in (200, 404)
     assert "MONGO" not in prod.get("/..%2f..%2fbackend%2f.env.example").text
+
+
+def test_telnet_only_opens_to_lab_addresses():
+    """Defence in depth: the device record is validated on save, and the connection checks again."""
+    from app.services.connection import ConnectFailed, ConnectParams, open_netmiko
+
+    for host in ("8.8.8.8", "core-sw.example.com"):
+        params = ConnectParams(method="telnet_lab", device_type="cisco_ios", host=host, port=23, username="u",
+                               password=None)
+        with pytest.raises(ConnectFailed, match="lab consoles"):
+            open_netmiko(params)

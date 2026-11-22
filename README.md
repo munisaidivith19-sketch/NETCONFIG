@@ -138,14 +138,17 @@ Golden files: `UPDATE_GOLDEN=1 .venv\Scripts\python -m pytest tests/drivers` rew
 Static checks: `ruff check .`, `bandit -c pyproject.toml -r app scripts`, `pip-audit -r requirements.txt`, `npm audit`.
 
 ## Security in one minute
-- **Localhost only** by default. `HOST` other than 127.0.0.1 needs `ALLOW_REMOTE=true` (and HTTPS).
+- **Localhost only** by default. `HOST` other than 127.0.0.1 needs `ALLOW_REMOTE=true` **and**
+  `SSL_CERTFILE`/`SSL_KEYFILE`: the app refuses to start without HTTPS.
 - **Host allowlist** blocks DNS rebinding; **Origin + `X-Requested-With: NetConfigStudio`** blocks
   other websites from driving the API (CSRF to localhost). No CORS is ever answered.
 - **Strict CSP** and security headers; no inline scripts.
 - **Users and roles** (admin / engineer / viewer), bcrypt cost 12, 12+ character passwords,
-  lockout after 5 failures for 15 minutes, server-side sessions (8 h absolute, 30 min idle).
+  lockout after 5 failures for 15 minutes (atomic counter), server-side sessions (8 h absolute, 30 min idle).
+- **Strict input:** unknown fields are rejected and types are strict (`"10"` is not a number).
 - **Deny by default:** the app refuses to start if any API route has no role check.
-- **Device passwords are never stored** – they are typed at push time and kept in memory for that job only.
+- **Device passwords are never stored**: they are typed at push time and kept in memory for that job only.
+  The browser is told not to save them either.
 - **SSH host keys are pinned** on first connection. If a device later offers a different key, the push stops
   before the password is sent, until an admin compares and accepts the new fingerprint (Admin → SSH host keys).
 - **Two-person rule** for `production` devices, and **automatic rollback** (Cisco revert timer).
@@ -158,7 +161,8 @@ Static checks: `ruff check .`, `bandit -c pyproject.toml -r app scripts`, `pip-a
   command list is also checked against a denylist (`reload`, `erase`, `do rel`, …) and against
   changes that would cut the management connection.
 
-Details: `CLAUDE.md` section 8, `docs/adr/`, `docs/SYSTEM_DESIGN.md`, `docs/TEST_PLAN.md`.
+Details: **`docs/SECURITY.md`** (STRIDE threat model, CLAUDE.md §8 compliance table, limitations),
+**`docs/SECURITY_TESTING.md`** (how to demo each control), `docs/adr/`, `docs/TEST_PLAN.md`.
 
 ## Project layout
 ```
@@ -185,4 +189,5 @@ scripts/   Windows helper scripts
 | 4 | 4C UI quality pass (contrast, keyboard, phone width, copy; see `docs/UI_REVIEW.md`) | done |
 | 4 | 4D review | done |
 | 5 | 5A AI assistant (Ollama / Groq / Gemini; draft + explain) | done (not yet tried against a live provider) |
-| 5 | 5B hardening, 5C docs and release | – |
+| 5 | 5B security hardening (§8 review, HTTPS for remote mode, strict types, STRIDE docs) | done |
+| 5 | 5C clean-up, docs and release | – |

@@ -17,9 +17,18 @@ from typing import Protocol
 
 from pydantic import SecretStr
 
+from ..models.device import is_lab_address
+
 log = logging.getLogger("netconfig.connection")
 
 CONFIG_PROMPT = r"\(config[^)]*\)#"
+
+
+def _lab_address(host: str) -> bool:
+    try:
+        return is_lab_address(host)
+    except ValueError:  # a name instead of an address: never a lab console for Telnet
+        return False
 
 
 class ConnectFailed(Exception):
@@ -183,6 +192,9 @@ def open_netmiko(params: ConnectParams) -> NetmikoConnection:
                 "ssh_strict": True, "system_host_keys": False, "alt_host_keys": True, "alt_key_file": known_hosts,
                 "use_keys": False, "allow_agent": False}
     elif params.method == "telnet_lab":
+        # Checked when the device is saved too; checked again here because this is where Telnet is opened.
+        if not _lab_address(params.host):
+            raise ConnectFailed("error", "Telnet is allowed only to lab consoles on loopback or private addresses.")
         args = {**common, "device_type": f"{params.device_type}_telnet", "host": params.host, "port": params.port}
     elif params.method == "serial":
         args = {**common, "device_type": f"{params.device_type}_serial",

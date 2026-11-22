@@ -238,8 +238,12 @@ class AristaEos(DriverDefaults):
     # -------------------------------------------------------- push support
     def denylist(self) -> list[tuple[tuple[str, ...], str]]:
         # Only the push engine opens, commits, aborts or leaves ("end") a configuration session.
+        # Event handlers, schedules, aliases and daemons store a command (or a Linux program) and run it later,
+        # past the denylist: "event-handler x" + "action bash sudo reboot" (Phase 5B security review).
         return [(("configure", "session"), "configure session"), (("commit",), "commit"),
-                (("abort",), "abort"), (("rollback",), "rollback"), (("end",), "end")]
+                (("abort",), "abort"), (("rollback",), "rollback"), (("end",), "end"),
+                (("event-handler",), "event-handler"), (("schedule",), "schedule"), (("alias",), "alias"),
+                (("daemon",), "daemon")]
 
     def error_patterns(self) -> list[str]:
         return list(ERROR_PATTERNS)

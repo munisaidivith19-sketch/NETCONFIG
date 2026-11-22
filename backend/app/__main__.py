@@ -1,4 +1,4 @@
-"""Run with: python -m app [--reload]. Refuses non-localhost binds unless ALLOW_REMOTE=true."""
+"""Run with: python -m app [--reload]. Refuses non-localhost binds unless ALLOW_REMOTE=true and HTTPS is set."""
 
 import logging
 import sys
@@ -20,6 +20,8 @@ def main() -> None:
         proxy_headers=False,
         server_header=False,
         log_level="info",
+        ssl_certfile=str(settings.ssl_certfile) if settings.https else None,
+        ssl_keyfile=str(settings.ssl_keyfile) if settings.https else None,
     )
 
 

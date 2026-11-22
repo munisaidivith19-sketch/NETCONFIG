@@ -310,7 +310,9 @@ class JuniperJunos(DriverDefaults):
                 (("replace",), "replace"),
                 (("rename",), "rename"), (("copy",), "copy"), (("insert",), "insert"), (("wildcard",), "wildcard"),
                 # A configuration group applies its settings anywhere, past the management-port checks.
-                (("set", "groups"), "set groups"), (("set", "apply-groups"), "set apply-groups")]
+                (("set", "groups"), "set groups"), (("set", "apply-groups"), "set apply-groups"),
+                # Event policies and scripts run commands later, past this list (Phase 5B security review).
+                (("set", "event-options"), "set event-options"), (("set", "system", "scripts"), "set system scripts")]
 
     def error_patterns(self) -> list[str]:
         return list(ERROR_PATTERNS)

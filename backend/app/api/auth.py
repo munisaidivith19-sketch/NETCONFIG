@@ -26,7 +26,7 @@ def _set_cookie(response: Response, settings: Settings, token: str) -> None:
         max_age=settings.session_absolute_hours * 3600,
         httponly=True,
         samesite="strict",
-        secure=settings.cookie_secure,
+        secure=settings.secure_cookies,
         path="/",
     )
 
@@ -61,7 +61,7 @@ def logout(request: Request, response: Response, user: SessionUser = Depends(req
            db: Database = Depends(get_db), settings: Settings = Depends(get_settings)) -> dict:
     sessions.revoke(db, user.session_id)
     response.delete_cookie(settings.session_cookie, path="/", httponly=True, samesite="strict",
-                           secure=settings.cookie_secure)
+                           secure=settings.secure_cookies)
     audit.record(db, "auth.logout", who=user, request_id=rid(request))
     return {"ok": True}
 

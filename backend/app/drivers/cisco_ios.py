@@ -470,7 +470,9 @@ class CiscoIos(DriverDefaults):
         return {}, []
 
     def denylist(self) -> list[tuple[tuple[str, ...], str]]:
-        return []
+        # Features that store a command and run it later: the stored command ("action 1.0 reload") would not
+        # start with the denied word, so the whole feature is refused (Phase 5B security review).
+        return [(("event", "manager"), "event manager"), (("kron",), "kron"), (("alias",), "alias")]
 
     # --------------------------------------------------------- push support
     def error_patterns(self) -> list[str]:

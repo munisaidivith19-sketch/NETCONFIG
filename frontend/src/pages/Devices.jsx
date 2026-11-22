@@ -5,7 +5,7 @@ import { del, get, patch, post } from '../lib/api.js'
 import { useAuth } from '../lib/auth.jsx'
 import { CATEGORIES, CONNECTIONS, SUPPORT, categoryIcon, categoryLabel } from '../lib/labels.js'
 import DeviceForm from '../components/DeviceForm.jsx'
-import { Alert, Badge, Dialog, Empty, ErrorNote, Field, PageHeader, Panel, SkeletonRows, TelnetAlert, formatDate } from '../components/ui.jsx'
+import { Alert, Badge, Dialog, Empty, ErrorNote, Field, NO_SAVE, PageHeader, Panel, SkeletonRows, TelnetAlert, formatDate } from '../components/ui.jsx'
 
 const FACT_LABELS = [['manufacturer', 'Manufacturer'], ['model', 'Model'], ['firmwareversion', 'Firmware'],
   ['version', 'Software'], ['serialnumber', 'Serial number'], ['serial', 'Serial number'], ['hostname', 'Host name']]
@@ -61,10 +61,10 @@ function OnvifRead({ device, onDone }) {
       <ErrorNote error={error} />
       <div className="form-grid">
         <Field label="Camera user" error={fields.username}>
-          {(p) => <input {...p} className="input" value={form.username} onChange={set('username')} maxLength={64} autoComplete="off" required />}
+          {(p) => <input {...p} className="input" value={form.username} onChange={set('username')} maxLength={64} {...NO_SAVE} required />}
         </Field>
         <Field label="Camera password" error={fields.password}>
-          {(p) => <input {...p} className="input" type="password" value={form.password} onChange={set('password')} maxLength={128} autoComplete="off" required />}
+          {(p) => <input {...p} className="input" type="password" value={form.password} onChange={set('password')} maxLength={128} {...NO_SAVE} required />}
         </Field>
         <Field label="HTTP port" error={fields.port}>
           {(p) => <input {...p} className="input" type="number" min={1} max={65535} value={form.port} onChange={set('port')} />}

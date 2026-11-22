@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Play, ShieldAlert } from 'lucide-react'
 import { post } from '../lib/api.js'
 import { checkNewSecret, needsLogin, secretsNeeded } from '../lib/jobs.js'
-import { Alert, ErrorNote, Field, TelnetAlert } from './ui.jsx'
+import { Alert, ErrorNote, Field, NO_SAVE, TelnetAlert } from './ui.jsx'
 
 const EMPTY = {
   username: '', password: '', enable_secret: '',
@@ -67,11 +67,11 @@ export default function RunForm({ job, onStarted }) {
     }
   }
 
-  const input = (name, label, { hint, auto = 'off', type = 'password' } = {}) => (
+  const input = (name, label, { hint, type = 'password' } = {}) => (
     <Field label={label} hint={hint} error={errors[name]}>
       {(props) => (
         <input {...props} className="input" type={type} name={name} value={v[name]} onChange={set(name)}
-          autoComplete={auto} spellCheck={false} maxLength={128} />
+          {...NO_SAVE} spellCheck={false} maxLength={128} />
       )}
     </Field>
   )
@@ -90,7 +90,7 @@ export default function RunForm({ job, onStarted }) {
       )}
       {many && <p className="faint" style={{ margin: 0 }}>The same login is used for every device in this job.</p>}
       <div className="form-grid">
-        {input('username', 'Device username', { type: 'text', auto: 'off' })}
+        {input('username', 'Device username', { type: 'text' })}
         {input('password', 'Device password')}
         {input('enable_secret', 'Enable secret (if the device asks)', { hint: 'Leave empty if the user lands in privileged mode.' })}
       </div>
@@ -98,10 +98,10 @@ export default function RunForm({ job, onStarted }) {
         <fieldset className="section-card stack">
           <legend><ShieldAlert size={16} aria-hidden="true" /> Secrets this plan sets on the device</legend>
           <div className="form-grid">
-            {need.sshUser && input('ssh_user_password', `Password for new local user "${need.sshUser}"`, { auto: 'new-password', hint: '8–64 characters, no spaces or # ? ; | " \' ^' })}
-            {need.sshUser && input('ssh_user_password2', 'Repeat that password', { auto: 'new-password' })}
-            {need.enableSecret && input('new_enable_secret', 'New enable secret', { auto: 'new-password' })}
-            {need.enableSecret && input('new_enable_secret2', 'Repeat the new enable secret', { auto: 'new-password' })}
+            {need.sshUser && input('ssh_user_password', `Password for new local user "${need.sshUser}"`, { hint: '8–64 characters, no spaces or # ? ; | " \' ^' })}
+            {need.sshUser && input('ssh_user_password2', 'Repeat that password')}
+            {need.enableSecret && input('new_enable_secret', 'New enable secret')}
+            {need.enableSecret && input('new_enable_secret2', 'Repeat the new enable secret')}
           </div>
         </fieldset>
       )}

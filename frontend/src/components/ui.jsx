@@ -141,6 +141,12 @@ export function Alert({ tone = 'info', title, children }) {
   )
 }
 
+/**
+ * For device logins and secrets (CLAUDE.md 8.3: never kept in the browser's storage). "off" alone is ignored by
+ * some browsers for password fields, so the common password-manager opt-outs are added too.
+ */
+export const NO_SAVE = { autoComplete: 'off', 'data-lpignore': 'true', 'data-1p-ignore': 'true', 'data-bwignore': 'true', 'data-form-type': 'other' }
+
 export const TelnetAlert = () => <Alert tone="warning" title="Insecure lab console.">{TELNET_WARNING}</Alert>
 
 export function Empty({ icon: Icon, title, children, action }) {

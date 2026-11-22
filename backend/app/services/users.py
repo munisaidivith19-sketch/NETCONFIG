@@ -2,6 +2,7 @@
 
 from datetime import timedelta
 
+from pymongo import ReturnDocument
 from pymongo.collation import Collation
 from pymongo.database import Database
 from pymongo.errors import DuplicateKeyError
@@ -59,12 +60,14 @@ def authenticate(db: Database, settings: Settings, username: str, password: str)
         return None, "locked"
 
     if not verify_password(password, user.get("password_hash")):
-        failures = user.get("failed_logins", 0) + 1
-        update: dict = {"failed_logins": failures}
-        if failures >= settings.lockout_threshold:
-            update = {"failed_logins": 0, "locked_until": now + timedelta(minutes=settings.lockout_minutes)}
-        db.users.update_one({"_id": user["_id"]}, {"$set": update})
-        return None, "locked_now" if "locked_until" in update else "bad_password"
+        # $inc in the database, not read-add-write here: parallel wrong guesses must each count.
+        counted = db.users.find_one_and_update({"_id": user["_id"]}, {"$inc": {"failed_logins": 1}},
+                                               projection={"failed_logins": 1}, return_document=ReturnDocument.AFTER)
+        if counted and counted["failed_logins"] >= settings.lockout_threshold:
+            db.users.update_one({"_id": user["_id"]}, {"$set": {
+                "failed_logins": 0, "locked_until": now + timedelta(minutes=settings.lockout_minutes)}})
+            return None, "locked_now"
+        return None, "bad_password"
 
     if user.get("disabled"):
         return None, "disabled"

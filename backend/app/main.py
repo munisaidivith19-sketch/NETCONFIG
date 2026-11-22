@@ -46,7 +46,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if settings.simulate_devices:
             log.warning("SIMULATE_DEVICES=true: pushes go to simulated devices, not the network.")
         if settings.allow_remote:
-            log.warning("ALLOW_REMOTE=true: NetConfig Studio is reachable from the network. Use HTTPS.")
+            log.warning("ALLOW_REMOTE=true: NetConfig Studio is reachable from the network (HTTPS on %s:%s). "
+                        "Only engineers who need it should be able to reach this port.", settings.host, settings.port)
         yield
         app.state.poller.shutdown()
         app.state.runner.shutdown()
