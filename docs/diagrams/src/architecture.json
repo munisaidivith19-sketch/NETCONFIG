@@ -5,26 +5,50 @@
     "title": "NetConfig Studio Architecture",
     "output": "docs/diagrams/architecture.html",
     "quality_profile": "showcase",
-    "locale": "en"
+    "locale": "en",
+    "repository": {
+      "url": "https://github.com/munisaidivith19-sketch/NETCONFIG.git",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "826943c547b9ecbbea7bc51768d5fb6e878fff0e"
+    }
   },
   "components": [
-    { "id": "browser", "type": "frontend", "label": "Browser", "sublabel": "React SPA, same origin", "pos": [40, 300], "size": [136, 64] },
-    { "id": "guard", "type": "security", "label": "Localhost Guard", "sublabel": "Host · Origin · CSP", "pos": [291, 300], "size": [136, 64], "tag": "X-Requested-With" },
-    { "id": "api", "type": "backend", "label": "REST API /api/*", "sublabel": "FastAPI routers", "pos": [477, 300], "size": [136, 64], "tag": "deny by default" },
-    { "id": "jobs", "type": "backend", "label": "Job Runner", "sublabel": "thread pool + states", "pos": [703, 300], "size": [136, 64] },
-    { "id": "push", "type": "backend", "label": "Push Engine", "sublabel": "backup→apply→verify", "pos": [939, 300], "size": [136, 64], "tag": "denylist · mgmt-if" },
-    { "id": "netmiko", "type": "backend", "label": "Netmiko", "sublabel": "SSH · serial · lab telnet", "pos": [1125, 300], "size": [136, 64] },
-    { "id": "devices", "type": "external", "label": "Network Devices", "sublabel": "switches · routers", "pos": [1371, 300], "size": [136, 64] },
+    { "id": "browser", "type": "frontend", "label": "Browser", "sublabel": "React SPA, same origin", "pos": [40, 300], "size": [150, 64],
+      "sources": [{ "path": "frontend/src/lib/api.js", "line": 1, "end_line": 6, "label": "custom header on every call" }] },
+    { "id": "guard", "type": "security", "label": "Localhost Guard", "sublabel": "Host · Origin · CSP", "tag": "X-Requested-With", "pos": [302, 300], "size": [150, 64],
+      "sources": [{ "path": "backend/app/security/guard.py", "line": 58, "label": "ASGI guard" }, { "path": "backend/app/security/guard.py", "line": 40, "end_line": 55, "label": "security headers, HSTS" }] },
+    { "id": "api", "type": "backend", "label": "REST API /api/*", "sublabel": "FastAPI routers", "tag": "deny by default", "pos": [520, 300], "size": [150, 64],
+      "sources": [{ "path": "backend/app/main.py", "line": 31, "label": "app factory" }, { "path": "backend/app/security/rbac.py", "line": 85, "label": "every route has a role" }] },
+    { "id": "jobs", "type": "backend", "label": "Job Runner", "sublabel": "approval · hash · threads", "tag": "memory-only creds vault", "pos": [800, 300], "size": [150, 64],
+      "sources": [{ "path": "backend/app/services/jobs.py", "line": 319, "label": "JobRunner" }, { "path": "backend/app/services/jobs.py", "line": 76, "end_line": 94, "label": "Vault (memory only)" }, { "path": "backend/app/services/jobs.py", "line": 407, "end_line": 415, "label": "approved hash re-checked" }] },
+    { "id": "push", "type": "backend", "label": "Push Engine", "sublabel": "backup→apply→verify", "tag": "rollback on failure", "pos": [1050, 300], "size": [150, 64],
+      "sources": [{ "path": "backend/app/services/push.py", "line": 130, "label": "PushEngine" }, { "path": "backend/app/services/push.py", "line": 411, "end_line": 450, "label": "rollback" }] },
+    { "id": "connector", "type": "security", "label": "Device Connector", "sublabel": "Netmiko · SSH / console", "tag": "host key pinned", "pos": [1300, 300], "size": [150, 64],
+      "sources": [{ "path": "backend/app/services/hostkeys.py", "line": 61, "label": "Connector" }, { "path": "backend/app/services/hostkeys.py", "line": 40, "label": "changed key refused" }, { "path": "backend/app/services/connection.py", "line": 168, "label": "open_netmiko" }] },
+    { "id": "devices", "type": "external", "label": "Network Devices", "sublabel": "switches · routers", "pos": [1565, 300], "size": [150, 64],
+      "sources": [{ "path": "backend/app/services/connection.py", "line": 168, "label": "SSH / serial / lab telnet" }] },
 
-    { "id": "sessions", "type": "security", "label": "Sessions + RBAC", "sublabel": "bcrypt · httpOnly", "pos": [263, 140], "size": [136, 64] },
-    { "id": "mongo", "type": "database", "label": "MongoDB (local)", "sublabel": "catalog · jobs · audit", "pos": [477, 140], "size": [136, 64], "tag": "no device secrets" },
-    { "id": "vault", "type": "security", "label": "Credential Vault", "sublabel": "SecretStr, per job", "pos": [939, 140], "size": [136, 64], "tag": "memory only" },
+    { "id": "sessions", "type": "security", "label": "Sessions + RBAC", "sublabel": "bcrypt · lockout", "tag": "httpOnly SameSite", "pos": [302, 140], "size": [150, 64],
+      "sources": [{ "path": "backend/app/security/sessions.py", "line": 48, "label": "resolve session" }, { "path": "backend/app/services/users.py", "line": 45, "label": "authenticate + lockout" }] },
+    { "id": "mongo", "type": "database", "label": "MongoDB (local)", "sublabel": "catalog · jobs · host keys · audit chain", "tag": "no device passwords", "pos": [520, 140], "size": [430, 64],
+      "sources": [{ "path": "backend/app/db.py", "line": 14, "label": "client" }, { "path": "backend/app/services/audit.py", "line": 44, "label": "append-only audit" }, { "path": "backend/app/services/audit.py", "line": 75, "label": "hash chain check" }] },
 
-    { "id": "validation", "type": "backend", "label": "Validation", "sublabel": "ipaddress · allowlists", "pos": [477, 470], "size": [136, 64] },
-    { "id": "drivers", "type": "backend", "label": "OS Drivers", "sublabel": "pure generators", "pos": [939, 470], "size": [136, 64], "tag": "golden-file tested" }
+    { "id": "ai", "type": "backend", "label": "AI Assistant", "sublabel": "draft · explain", "tag": "off by default", "pos": [400, 470], "size": [150, 64],
+      "sources": [{ "path": "backend/app/api/ai.py", "line": 47, "end_line": 60, "label": "draft and explain routes" }, { "path": "backend/app/services/ai.py", "line": 90, "label": "mask before sending" }] },
+    { "id": "provider", "type": "external", "label": "AI Provider", "sublabel": "Ollama local · Groq/Gemini", "pos": [400, 660], "size": [150, 64],
+      "sources": [{ "path": "backend/app/services/ai.py", "line": 26, "end_line": 31, "label": "fixed provider URLs" }] },
+    { "id": "validation", "type": "backend", "label": "Validation", "sublabel": "ipaddress · allowlists", "pos": [600, 470], "size": [150, 64],
+      "sources": [{ "path": "backend/app/services/validation.py", "line": 154, "label": "validate_plan" }, { "path": "backend/app/services/planning.py", "line": 74, "label": "preview pipeline" }] },
+    { "id": "drivers", "type": "backend", "label": "OS Drivers", "sublabel": "4 core · 4 experimental", "tag": "golden-file tested", "pos": [960, 470], "size": [150, 64],
+      "sources": [{ "path": "backend/app/drivers/registry.py", "line": 16, "end_line": 20, "label": "core + experimental" }, { "path": "backend/app/drivers/base.py", "line": 111, "label": "Driver protocol" }] },
+    { "id": "safety", "type": "security", "label": "Safety Checks", "sublabel": "denylist · mgmt port", "pos": [1140, 470], "size": [150, 64],
+      "sources": [{ "path": "backend/app/services/safety.py", "line": 17, "label": "denylist" }, { "path": "backend/app/services/safety.py", "line": 248, "label": "management protection" }] },
+    { "id": "poller", "type": "backend", "label": "Status Poller", "sublabel": "background thread", "pos": [1340, 470], "size": [150, 64],
+      "sources": [{ "path": "backend/app/services/status.py", "line": 115, "label": "StatusPoller" }, { "path": "backend/app/services/status.py", "line": 41, "end_line": 72, "label": "ping / TCP port" }] }
   ],
   "boundaries": [
-    { "kind": "region", "label": "Engineer laptop · Windows 11 · 127.0.0.1", "wraps": ["browser", "guard", "api", "jobs", "push", "netmiko", "sessions", "mongo", "vault", "validation", "drivers"] }
+    { "kind": "region", "label": "Engineer laptop · Windows 11 · 127.0.0.1", "wraps": ["browser", "guard", "api", "jobs", "push", "connector", "sessions", "mongo", "ai", "validation", "drivers", "safety", "poller"] }
   ],
   "connections": [
     { "id": "browser-guard", "from": "browser", "to": "guard", "label": "fetch + cookie", "variant": "emphasis" },
@@ -32,19 +56,34 @@
     { "id": "guard-sessions", "from": "guard", "to": "sessions", "label": "check session", "variant": "security", "fromSide": "top", "toSide": "bottom" },
     { "id": "sessions-mongo", "from": "sessions", "to": "mongo", "variant": "dashed" },
     { "id": "api-mongo", "from": "api", "to": "mongo", "label": "CRUD + audit", "fromSide": "top", "toSide": "bottom" },
-    { "id": "api-validation", "from": "api", "to": "validation", "label": "preview plan", "fromSide": "bottom", "toSide": "top" },
-    { "id": "validation-drivers", "from": "validation", "to": "drivers", "label": "generate commands" },
-    { "id": "api-jobs", "from": "api", "to": "jobs", "label": "run job", "variant": "emphasis" },
-    { "id": "jobs-mongo", "from": "jobs", "to": "mongo", "label": "progress (masked)", "variant": "dashed", "fromSide": "top", "toSide": "right" },
+    { "id": "api-ai", "from": "api", "to": "ai", "label": "engineer only", "fromSide": "bottom", "toSide": "top" },
+    { "id": "ai-provider", "from": "ai", "to": "provider", "label": "masked text", "variant": "dashed", "fromSide": "bottom", "toSide": "top" },
+    { "id": "api-validation", "from": "api", "to": "validation", "label": "preview", "fromSide": "bottom", "toSide": "top" },
+    { "id": "validation-drivers", "from": "validation", "to": "drivers", "label": "generate" },
+    { "id": "api-jobs", "from": "api", "to": "jobs", "label": "create · run job", "variant": "emphasis" },
+    { "id": "jobs-mongo", "from": "jobs", "to": "mongo", "label": "progress (masked)", "variant": "dashed", "fromSide": "top", "toSide": "bottom" },
     { "id": "jobs-push", "from": "jobs", "to": "push", "label": "device step", "variant": "emphasis" },
-    { "id": "push-vault", "from": "push", "to": "vault", "label": "read creds", "variant": "security", "fromSide": "top", "toSide": "bottom" },
-    { "id": "push-drivers", "from": "push", "to": "drivers", "label": "commands · checks", "fromSide": "bottom", "toSide": "top" },
-    { "id": "push-netmiko", "from": "push", "to": "netmiko", "variant": "emphasis" },
-    { "id": "netmiko-devices", "from": "netmiko", "to": "devices", "label": "SSH / console", "variant": "emphasis" }
+    { "id": "push-drivers", "from": "push", "to": "drivers", "label": "commands", "fromSide": "bottom", "toSide": "top" },
+    { "id": "push-safety", "from": "push", "to": "safety", "label": "checks", "variant": "security", "fromSide": "bottom", "toSide": "top" },
+    { "id": "push-connector", "from": "push", "to": "connector", "label": "open + login", "variant": "emphasis" },
+    { "id": "connector-devices", "from": "connector", "to": "devices", "label": "SSH · console", "variant": "emphasis" },
+    { "id": "poller-devices", "from": "poller", "to": "devices", "label": "TCP port / ping", "variant": "dashed", "fromSide": "right", "toSide": "bottom" }
   ],
   "cards": [
-    { "dot": "rose", "title": "Security controls", "items": ["Bound to 127.0.0.1; Host allowlist blocks DNS rebinding", "Origin + custom header block CSRF to localhost", "Credentials wiped when the job ends"] },
-    { "dot": "emerald", "title": "Safe push", "items": ["Backup before apply; stop on first CLI error", "Cisco revert timer / Junos commit confirmed", "Production devices need a second approver"] },
-    { "dot": "cyan", "title": "Testing seams", "items": ["Drivers are pure: golden-file tests", "Netmiko swapped for a fake connection in tests"] }
+    { "dot": "rose", "title": "Security controls", "items": [
+      "127.0.0.1 only; Host allowlist blocks DNS rebinding",
+      "Origin + X-Requested-With block CSRF to localhost",
+      "Remote mode needs ALLOW_REMOTE + HTTPS, one address",
+      "Device logins in memory for one job, never stored" ] },
+    { "dot": "emerald", "title": "Safe push", "items": [
+      "Commands hash frozen at create; re-checked at run",
+      "Production: a different admin approves within 24 h",
+      "Device-side timer: revert / commit confirmed / checkpoint",
+      "Changed SSH host key stops before the password is sent" ] },
+    { "dot": "cyan", "title": "Optional and test seams", "items": [
+      "Read-only discovery: show commands via the same connector",
+      "SIMULATE_DEVICES swaps in a fake switch (never production)",
+      "Experimental drivers only with ENABLE_EXPERIMENTAL_DRIVERS",
+      "Drivers are pure: golden-file tests; fake Netmiko in tests" ] }
   ]
 }

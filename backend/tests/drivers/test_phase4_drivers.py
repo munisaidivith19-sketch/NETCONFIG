@@ -183,6 +183,7 @@ def test_aoscx_management_interface_and_protection():
     (EOS, "alias x bash"), (EOS, "daemon x"), (EOS, "do event-handler x"),
     (JUNOS, "set event-options policy p events e then execute-commands commands x"),
     (JUNOS, "set system scripts op file x.slax"),
+    (CX, "job j1"), (CX, "schedule s1"), (CX, "alias x boot system"),
 ])
 def test_driver_denylist(drv, command):
     assert safety.check_denylist([command], drv.denylist())

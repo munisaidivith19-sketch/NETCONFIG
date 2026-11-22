@@ -72,8 +72,13 @@ def authenticate(db: Database, settings: Settings, username: str, password: str)
     if user.get("disabled"):
         return None, "disabled"
 
-    db.users.update_one({"_id": user["_id"]}, {"$set": {"failed_logins": 0, "locked_until": None,
-                                                         "last_login_at": now}})
+    # Only if the account is still not locked: parallel wrong guesses may have locked it while this request was
+    # in bcrypt. Without this condition a correct guess among them would clear the new lock.
+    cleared = db.users.update_one(
+        {"_id": user["_id"], "$or": [{"locked_until": None}, {"locked_until": {"$lte": now}}]},
+        {"$set": {"failed_logins": 0, "locked_until": None, "last_login_at": now}})
+    if cleared.matched_count == 0:
+        return None, "locked"
     return user, "ok"
 
 

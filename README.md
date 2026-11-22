@@ -39,12 +39,13 @@ cd frontend; npm run dev                                          # UI  on http:
 ```
 Open http://127.0.0.1:5173. Vite forwards `/api` to the backend, so the browser sees one origin.
 
-## Run (production-style, one process)
+## Run (daily use, one process)
 ```powershell
-cd frontend; npm run build; cd ..\backend
-$env:ENV="production"; .venv\Scripts\python -m app
+powershell -ExecutionPolicy Bypass -File scripts\start.ps1        # -NoBrowser to skip opening the browser
 ```
-Open http://127.0.0.1:8000 – FastAPI serves the built frontend. API docs (`/docs`) are off in production.
+It checks MongoDB, rebuilds the frontend if a source file is newer than `frontend\dist`, starts the app with
+`ENV=production` (API docs off, simulation refused) and opens http://127.0.0.1:8000, where FastAPI serves the
+built frontend. Using the app: **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)**.
 
 ## Try a push without a device (simulation mode)
 For demos and UI work only. Pushes go to an in-memory pretend Cisco switch, not the network, and a
@@ -137,6 +138,11 @@ Golden files: `UPDATE_GOLDEN=1 .venv\Scripts\python -m pytest tests/drivers` rew
 
 Static checks: `ruff check .`, `bandit -c pyproject.toml -r app scripts`, `pip-audit -r requirements.txt`, `npm audit`.
 
+**Everything at once** (from the project root; exit code 0 only if all pass, skipped database tests count as a failure):
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\check.ps1          # add -Quick to skip the two online audits
+```
+
 ## Security in one minute
 - **Localhost only** by default. `HOST` other than 127.0.0.1 needs `ALLOW_REMOTE=true` **and**
   `SSL_CERTFILE`/`SSL_KEYFILE`: the app refuses to start without HTTPS.
@@ -190,4 +196,4 @@ scripts/   Windows helper scripts
 | 4 | 4D review | done |
 | 5 | 5A AI assistant (Ollama / Groq / Gemini; draft + explain) | done (not yet tried against a live provider) |
 | 5 | 5B security hardening (§8 review, HTTPS for remote mode, strict types, STRIDE docs) | done |
-| 5 | 5C clean-up, docs and release | – |
+| 5 | 5C clean-up, docs and release (tech debt, review + simplify, user guide, driver guide, diagrams, `start.ps1`, `check.ps1`, release checklist) | done |

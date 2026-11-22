@@ -79,6 +79,7 @@ default ports to routed (community report); it is harmless where it matches the 
   `% Unknown command`, `Error`, `% …` (U **[LAB]**). The `WARNING Please "checkpoint auto confirm"` reminder is
   informational.
 - Extra denylist (custom commands): `checkpoint …` (only the engine starts or confirms one), `erase …`,
-  `boot …`, `no user`, `zeroize`.
+  `boot …`, `no user`, `zeroize`, and (Phase 5C) `job`, `schedule` and `alias`, which store CLI commands that
+  run later.
 - Discovery (Phase 4B): `show system` (Product Name, Chassis Serial Nbr), `show lldp neighbor-info detail`
   (V – F1010 p.374, pp.304–307).

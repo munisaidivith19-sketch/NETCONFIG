@@ -142,10 +142,19 @@ export function Alert({ tone = 'info', title, children }) {
 }
 
 /**
- * For device logins and secrets (CLAUDE.md 8.3: never kept in the browser's storage). "off" alone is ignored by
- * some browsers for password fields, so the common password-manager opt-outs are added too.
+ * For device logins and secrets (CLAUDE.md 8.3: never kept in the browser's storage): the common password-manager
+ * opt-outs, for the text fields of a device login (user names).
  */
 export const NO_SAVE = { autoComplete: 'off', 'data-lpignore': 'true', 'data-1p-ignore': 'true', 'data-bwignore': 'true', 'data-form-type': 'other' }
+
+/**
+ * Every device password / secret field. Chromium ignores autocomplete="off" on password fields and would fill in
+ * the engineer's saved NetConfig password; "new-password" stops that, so a saved app password can never become a
+ * device's local admin password.
+ */
+export function SecretInput(props) {
+  return <input className="input" type="password" maxLength={128} spellCheck={false} {...NO_SAVE} autoComplete="new-password" {...props} />
+}
 
 export const TelnetAlert = () => <Alert tone="warning" title="Insecure lab console.">{TELNET_WARNING}</Alert>
 

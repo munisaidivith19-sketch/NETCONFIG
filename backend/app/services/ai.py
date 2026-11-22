@@ -165,7 +165,9 @@ def parse_draft(reply: str) -> tuple[ConfigPlan, list[str]]:
         raise ApiError(422, "The assistant did not return a plan. Describe the network in more detail and try again.")
     dropped = [k for k in DRAFT_DROPPED if draft.pop(k, None)]
     try:
-        return ConfigPlan.model_validate(draft), dropped
+        # Lax types here only: a model often writes "10" for 10. The draft just fills the form; the plan the browser
+        # sends back is validated strictly like any other.
+        return ConfigPlan.model_validate(draft, strict=False), dropped
     except ValidationError as exc:
         where = sorted({".".join(str(p) for p in e["loc"]) for e in exc.errors()})[:8]
         raise ApiError(422, "The assistant's draft is not a valid plan (problem at: " + ", ".join(where) +

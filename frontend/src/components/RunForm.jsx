@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Play, ShieldAlert } from 'lucide-react'
 import { post } from '../lib/api.js'
 import { checkNewSecret, needsLogin, secretsNeeded } from '../lib/jobs.js'
-import { Alert, ErrorNote, Field, NO_SAVE, TelnetAlert } from './ui.jsx'
+import { Alert, ErrorNote, Field, NO_SAVE, SecretInput, TelnetAlert } from './ui.jsx'
 
 const EMPTY = {
   username: '', password: '', enable_secret: '',
@@ -69,10 +69,12 @@ export default function RunForm({ job, onStarted }) {
 
   const input = (name, label, { hint, type = 'password' } = {}) => (
     <Field label={label} hint={hint} error={errors[name]}>
-      {(props) => (
+      {(props) => (type === 'password' ? (
+        <SecretInput {...props} name={name} value={v[name]} onChange={set(name)} />
+      ) : (
         <input {...props} className="input" type={type} name={name} value={v[name]} onChange={set(name)}
           {...NO_SAVE} spellCheck={false} maxLength={128} />
-      )}
+      ))}
     </Field>
   )
 

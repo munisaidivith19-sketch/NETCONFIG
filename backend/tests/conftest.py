@@ -5,6 +5,7 @@ dropped before and after the session. If MongoDB is not running these tests are 
 clear reason – and a phase is not done while any of them are skipped.
 """
 
+import os
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -36,7 +37,10 @@ def mongo_client():
     try:
         client.admin.command("ping")
     except Exception:  # noqa: BLE001
-        pytest.skip("MongoDB not reachable at 127.0.0.1:27017 – start the MongoDB service")
+        reason = "MongoDB not reachable at 127.0.0.1:27017 – start the MongoDB service"
+        if os.environ.get("REQUIRE_MONGO") == "1":  # scripts/check.ps1: a release needs every database test
+            pytest.fail(reason)
+        pytest.skip(reason)
     client.drop_database(TEST_DB)
     yield client
     client.drop_database(TEST_DB)

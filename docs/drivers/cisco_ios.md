@@ -392,7 +392,7 @@ Source: [Using the Command-Line Interface, 15.2(2)E (Catalyst 2960-XR)](https://
 - `crypto key generate rsa modulus N` asks "Do you really want to replace them? [yes/no]" when keys exist.
   It is only sent when `show ip ssh` says SSH is disabled or the plan sets `regenerate_keys`;
   the prompt is then answered `yes` (Netmiko `send_command` with `expect_string`).
-- Extra denylist (custom commands, Phase 5B): `event manager`, `kron` and `alias`. They store a command that
+- Extra denylist (custom commands, Phase 5B/5C): `event manager`, `kron`, `alias` and `macro` (Smartport macros). They store a command that
   runs later (`action 1.0 reload` does not start with `reload`), so the global denylist would not see it.
 - Still **experimental**: none of this has been run on IOSv / IOSvL2 yet. The checklist is in
   `docs/LAB_TESTING.md` (Phase 3B); only after it passes is the driver marked `tested`.

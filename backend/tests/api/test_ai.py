@@ -95,6 +95,14 @@ def test_draft_is_validated_stripped_of_credentials_and_never_pushed(client_for,
     assert entry["details"]["sha256"] and "Wi-Fi" not in str(entry)  # hash only, never the text
 
 
+def test_draft_accepts_numbers_written_as_strings(client_for, monkeypatch):
+    # Models often write "30" for 30. The draft only fills the form (the plan sent back is validated strictly).
+    monkeypatch.setattr(ai, "_send", Provider(json.dumps({"vlans": [{"id": "30", "name": "WiFi"}]})))
+    r = client_for("engineer").post("/api/ai/draft", json={"description": "Wi-Fi on VLAN 30 please"})
+    assert r.status_code == 200, r.text
+    assert r.json()["plan"]["vlans"] == [{"id": 30, "name": "WiFi"}]
+
+
 @pytest.mark.parametrize("reply", ["I cannot do that.", "{not json", "[1, 2]",
                                    json.dumps({"vlans": [{"id": 30, "name": "bad;name"}]}),
                                    json.dumps({"rogue_key": 1})])

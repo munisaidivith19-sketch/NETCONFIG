@@ -238,7 +238,9 @@ class ArubaAoscx(DriverDefaults):
     def denylist(self) -> list[tuple[tuple[str, ...], str]]:
         # Only the push engine starts or confirms a checkpoint; checkpoints and users are never removed.
         return [(("checkpoint",), "checkpoint"), (("erase",), "erase"), (("boot",), "boot"),
-                (("no", "user"), "no user"), (("zeroize",), "zeroize")]
+                (("no", "user"), "no user"), (("zeroize",), "zeroize"),
+                # Jobs, schedules and aliases store CLI commands that run later, past this list (Phase 5C review).
+                (("job",), "job"), (("schedule",), "schedule"), (("alias",), "alias")]
 
     def error_patterns(self) -> list[str]:
         return list(ERROR_PATTERNS)

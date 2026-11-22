@@ -126,6 +126,8 @@ CISCO_EXTRA = CiscoIos(ModelInfo(id="x", name="x", category="switch")).denylist(
     # Phase 5B security review: a stored command ("action 1.0 reload") does not start with the denied word
     "event manager applet x", "ev man applet x", "do event manager run x", "kron policy-list p",
     "kron occurrence o in 1 oneshot", "alias exec x reload",
+    # Phase 5C review: Smartport macros replay stored lines on an interface
+    "macro name x", "macro apply x", "do macro apply x",
 ])
 def test_cisco_deferred_execution_blocked(command):
     assert check_denylist([command], CISCO_EXTRA), command

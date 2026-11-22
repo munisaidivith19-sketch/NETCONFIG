@@ -128,35 +128,74 @@ def test_unhandled_exception_is_safe(app, users):
     assert r.json()["error"]["request_id"]
 
 
+def test_empty_env_values_mean_unset(monkeypatch):
+    """A .env copied from .env.example has "SSL_CERTFILE=" and "AI_API_KEY=": that is "not set", not HTTPS with
+    certificate "." (Secure cookies over plain http would make sign-in impossible) or an empty API key."""
+    for name in ("SSL_CERTFILE", "SSL_KEYFILE", "AI_API_KEY"):
+        monkeypatch.setenv(name, "")
+    s = make_settings()
+    assert s.ssl_certfile is None and s.ssl_keyfile is None and s.ai_api_key is None
+    assert not s.https and not s.secure_cookies
+
+
 def test_refuses_non_local_bind_without_allow_remote_and_https(tmp_path):
     cert, key = tmp_path / "cert.pem", tmp_path / "key.pem"
+    lan = "192.168.1.10"
     with pytest.raises(RuntimeError, match="ALLOW_REMOTE"):
-        make_settings(host="0.0.0.0").check_bind_address()  # noqa: S104
+        make_settings(host=lan).check_bind_address()
     with pytest.raises(RuntimeError, match="without HTTPS"):
-        make_settings(host="0.0.0.0", allow_remote=True).check_bind_address()  # noqa: S104
+        make_settings(host=lan, allow_remote=True).check_bind_address()
     with pytest.raises(RuntimeError, match="not found"):
-        make_settings(host="0.0.0.0", allow_remote=True, ssl_certfile=cert,  # noqa: S104
-                      ssl_keyfile=key).check_bind_address()
+        make_settings(host=lan, allow_remote=True, ssl_certfile=cert, ssl_keyfile=key).check_bind_address()
     cert.write_text("cert")
     key.write_text("key")
-    remote = make_settings(host="192.168.1.10", allow_remote=True, ssl_certfile=cert, ssl_keyfile=key)
+    with pytest.raises(RuntimeError, match="own address"):  # a wildcard can never match the Host allowlist
+        make_settings(host="0.0.0.0", allow_remote=True, ssl_certfile=cert,  # noqa: S104
+                      ssl_keyfile=key).check_bind_address()
+    remote = make_settings(host=lan, allow_remote=True, ssl_certfile=cert, ssl_keyfile=key)
     remote.check_bind_address()
-    assert remote.secure_cookies and "https://192.168.1.10:8000" in remote.allowed_origins
+    assert remote.secure_cookies and remote.hsts and f"https://{lan}:8000" in remote.allowed_origins
+    assert f"{lan}:8000" in remote.allowed_hosts
     assert not any(o.startswith("http://") for o in remote.allowed_origins if "5173" not in o)
     make_settings(host="127.0.0.1").check_bind_address()  # localhost never needs any of it
 
 
-def test_https_sends_hsts_and_secure_cookie(db, users, tmp_path):
+def test_https_files_checked_on_every_bind(tmp_path):
+    cert = tmp_path / "cert.pem"
+    cert.write_text("cert")
+    with pytest.raises(RuntimeError, match="both"):  # half a configuration is not silently plain http
+        make_settings(ssl_certfile=cert).check_bind_address()
+    with pytest.raises(RuntimeError, match="not found"):  # a clear message, not a raw SSL error from uvicorn
+        make_settings(ssl_certfile=cert, ssl_keyfile=tmp_path / "missing.pem").check_bind_address()
+
+
+def test_origin_scheme_follows_what_is_served():
+    # COOKIE_SECURE without certificate files: the server still speaks http, so http origins must work.
+    s = make_settings(cookie_secure=True)
+    assert s.secure_cookies and "http://127.0.0.1:8000" in s.allowed_origins
+
+
+def test_https_on_localhost_secure_cookie_without_hsts(db, users, tmp_path):
     cert, key = tmp_path / "cert.pem", tmp_path / "key.pem"
-    settings = make_settings(ssl_certfile=cert, ssl_keyfile=key)  # localhost + HTTPS (files checked only remotely)
+    cert.write_text("cert")
+    key.write_text("key")
+    settings = make_settings(ssl_certfile=cert, ssl_keyfile=key)
     with TestClient(create_app(settings), base_url="https://127.0.0.1:8000", headers=HEADERS) as c:
         r = c.post("/api/auth/login", json={"username": "engineer", "password": PASSWORDS["engineer"]},
                    headers={"Origin": "https://127.0.0.1:8000"})
         assert r.status_code == 200, r.text
-        assert "max-age=" in r.headers["strict-transport-security"]
+        # HSTS would pin https on every localhost port (the Vite dev server too) for a year: remote mode only.
+        assert "strict-transport-security" not in r.headers
         assert "secure" in r.headers["set-cookie"].lower()
         r = c.post("/api/auth/logout", headers={"Origin": "http://127.0.0.1:8000"})
         assert r.status_code == 403  # the plain-http origin is no longer accepted
+
+
+def test_hsts_header_only_when_asked():
+    from app.security.guard import security_headers
+
+    assert (b"strict-transport-security", b"max-age=31536000") in security_headers("/api/health", hsts=True)
+    assert not any(k == b"strict-transport-security" for k, _ in security_headers("/api/health"))
 
 
 def test_frontend_served_with_spa_fallback_and_no_docs_in_production(db, tmp_path):

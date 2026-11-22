@@ -5,283 +5,91 @@
     "title": "NetConfig Studio Push Flow",
     "quality_profile": "showcase",
     "locale": "en",
-    "output": "docs/diagrams/push-flow.html"
+    "output": "docs/diagrams/push-flow.html",
+    "repository": {
+      "url": "https://github.com/munisaidivith19-sketch/NETCONFIG.git",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "826943c547b9ecbbea7bc51768d5fb6e878fff0e"
+    }
   },
   "lanes": [
-    {
-      "id": "engineer",
-      "label": "People"
-    },
-    {
-      "id": "server",
-      "label": "App (no device change)"
-    },
-    {
-      "id": "device",
-      "label": "Device session"
-    },
-    {
-      "id": "recovery",
-      "label": "Stop + rollback",
-      "variant": "exception"
-    }
+    { "id": "people", "label": "People" },
+    { "id": "app", "label": "App (no device change)" },
+    { "id": "device", "label": "Device session" },
+    { "id": "stop", "label": "Stop + rollback", "variant": "exception" }
   ],
   "phases": [
-    {
-      "id": "plan",
-      "label": "Plan + approve",
-      "fromCol": 0,
-      "toCol": 1
-    },
-    {
-      "id": "gate",
-      "label": "Connect",
-      "fromCol": 2,
-      "toCol": 2,
-      "variant": "emphasis"
-    },
-    {
-      "id": "execute",
-      "label": "Change window",
-      "fromCol": 3,
-      "toCol": 5,
-      "variant": "dashed"
-    }
+    { "id": "plan", "label": "Plan + approve", "fromCol": 0, "toCol": 1 },
+    { "id": "connect", "label": "Run + connect", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "window", "label": "Device safety window", "fromCol": 4, "toCol": 5, "variant": "dashed" }
   ],
   "groups": [],
-  "mainPath": [
-    "form",
-    "validate",
-    "preview",
-    "approval",
-    "connect",
-    "checks",
-    "apply",
-    "verify",
-    "save"
-  ],
+  "mainPath": ["form", "validate", "create", "approval", "run", "recheck", "connect", "prechecks", "apply", "verify"],
   "nodes": [
-    {
-      "id": "form",
-      "lane": "engineer",
-      "col": 0,
-      "type": "frontend",
-      "label": "Plan form",
-      "sublabel": "wizard input",
-      "width": 140
-    },
-    {
-      "id": "validate",
-      "lane": "server",
-      "col": 0,
-      "type": "security",
-      "label": "Validate",
-      "sublabel": "section 8.4 rules",
-      "width": 140
-    },
-    {
-      "id": "preview",
-      "lane": "server",
-      "col": 1,
-      "type": "backend",
-      "label": "Generate + preview",
-      "sublabel": "masked · denylist",
-      "width": 140
-    },
-    {
-      "id": "approval",
-      "lane": "engineer",
-      "col": 1,
-      "type": "security",
-      "label": "Approval",
-      "sublabel": "production only",
-      "tag": "approver ≠ requester",
-      "width": 140
-    },
-    {
-      "id": "connect",
-      "lane": "device",
-      "col": 2,
-      "type": "external",
-      "label": "Connect + backup",
-      "sublabel": "save running-config",
-      "tag": "host key pinned",
-      "width": 140
-    },
-    {
-      "id": "checks",
-      "lane": "server",
-      "col": 3,
-      "type": "security",
-      "label": "Pre-checks",
-      "sublabel": "mgmt-if · denylist",
-      "width": 140
-    },
-    {
-      "id": "apply",
-      "lane": "device",
-      "col": 3,
-      "type": "backend",
-      "label": "Apply",
-      "sublabel": "stop on 1st error",
-      "width": 140
-    },
-    {
-      "id": "verify",
-      "lane": "device",
-      "col": 4,
-      "type": "backend",
-      "label": "Verify",
-      "sublabel": "show commands",
-      "width": 140
-    },
-    {
-      "id": "save",
-      "lane": "device",
-      "col": 5,
-      "type": "backend",
-      "label": "Confirm + save",
-      "sublabel": "status: success",
-      "width": 140
-    },
-    {
-      "id": "rejected",
-      "lane": "recovery",
-      "col": 0,
-      "type": "security",
-      "label": "Rejected",
-      "sublabel": "field errors",
-      "width": 140
-    },
-    {
-      "id": "blocked",
-      "lane": "engineer",
-      "col": 3,
-      "type": "security",
-      "label": "Blocked",
-      "sublabel": "nothing applied",
-      "width": 140
-    },
-    {
-      "id": "rollback",
-      "lane": "recovery",
-      "col": 3,
-      "type": "security",
-      "label": "Rollback",
-      "sublabel": "status: rolled_back",
-      "width": 140
-    }
+    { "id": "form", "lane": "people", "col": 0, "type": "frontend", "label": "Plan form", "sublabel": "wizard or AI draft", "width": 140,
+      "sources": [{ "path": "frontend/src/pages/Configure.jsx", "line": 34, "label": "5-step wizard" }] },
+    { "id": "validate", "lane": "app", "col": 0, "type": "security", "label": "Validate + preview", "sublabel": "rules · driver · denylist", "width": 140,
+      "sources": [{ "path": "backend/app/services/planning.py", "line": 74, "label": "prepare" }, { "path": "backend/app/services/validation.py", "line": 154, "label": "validate_plan" }] },
+    { "id": "create", "lane": "app", "col": 1, "type": "backend", "label": "Create job", "sublabel": "commands hash frozen", "width": 140,
+      "sources": [{ "path": "backend/app/services/jobs.py", "line": 166, "end_line": 216, "label": "create" }] },
+    { "id": "approval", "lane": "people", "col": 1, "type": "security", "label": "Approval", "sublabel": "production only", "tag": "other admin · 24 h", "width": 140,
+      "sources": [{ "path": "backend/app/services/jobs.py", "line": 262, "end_line": 280, "label": "approve" }] },
+    { "id": "run", "lane": "people", "col": 2, "type": "frontend", "label": "Run + device login", "sublabel": "typed now, not stored", "width": 140,
+      "sources": [{ "path": "backend/app/services/jobs.py", "line": 385, "label": "run" }, { "path": "backend/app/services/jobs.py", "line": 76, "end_line": 94, "label": "memory-only vault" }] },
+    { "id": "recheck", "lane": "app", "col": 2, "type": "security", "label": "Re-check + queue", "sublabel": "same hash, same address", "width": 140,
+      "sources": [{ "path": "backend/app/services/jobs.py", "line": 395, "end_line": 415, "label": "approval binding" }] },
+    { "id": "connect", "lane": "device", "col": 2, "type": "external", "label": "Connect + backup", "sublabel": "running-config saved", "tag": "host key checked", "width": 140,
+      "sources": [{ "path": "backend/app/services/push.py", "line": 170, "end_line": 183, "label": "connect, backup" }, { "path": "backend/app/services/hostkeys.py", "line": 40, "label": "changed key refused" }] },
+    { "id": "prechecks", "lane": "device", "col": 3, "type": "security", "label": "Pre-checks", "sublabel": "mgmt port · denylist", "width": 140,
+      "sources": [{ "path": "backend/app/services/push.py", "line": 185, "end_line": 215, "label": "checking" }, { "path": "backend/app/services/safety.py", "line": 248, "label": "management rules" }] },
+    { "id": "apply", "lane": "device", "col": 4, "type": "backend", "label": "Apply", "sublabel": "stop at 1st CLI error", "tag": "timer on device", "width": 140,
+      "sources": [{ "path": "backend/app/services/push.py", "line": 234, "end_line": 276, "label": "applying" }] },
+    { "id": "verify", "lane": "device", "col": 5, "type": "backend", "label": "Verify, confirm, save", "sublabel": "show checks pass", "tag": "status: success", "width": 150,
+      "sources": [{ "path": "backend/app/services/push.py", "line": 278, "label": "verifying" }, { "path": "backend/app/services/push.py", "line": 331, "end_line": 392, "label": "confirm, save" }] },
+
+    { "id": "rejected", "lane": "stop", "col": 0, "type": "security", "label": "Refused", "sublabel": "field errors", "width": 140,
+      "sources": [{ "path": "backend/app/services/jobs.py", "line": 167, "end_line": 170, "label": "422, nothing created" }] },
+    { "id": "stopped", "lane": "stop", "col": 2, "type": "security", "label": "Stopped", "sublabel": "status: failed", "tag": "before the password", "width": 140,
+      "sources": [{ "path": "backend/app/services/push.py", "line": 170, "end_line": 178, "label": "connect failed" }] },
+    { "id": "blocked", "lane": "stop", "col": 3, "type": "security", "label": "Blocked", "sublabel": "nothing sent", "width": 140,
+      "sources": [{ "path": "backend/app/services/push.py", "line": 209, "end_line": 215, "label": "status: blocked" }] },
+    { "id": "rollback", "lane": "stop", "col": 4, "type": "security", "label": "Rollback now", "sublabel": "status: rolled_back", "width": 140,
+      "sources": [{ "path": "backend/app/services/push.py", "line": 411, "end_line": 440, "label": "_rollback" }] },
+    { "id": "timer", "lane": "stop", "col": 5, "type": "security", "label": "Device timer reverts", "sublabel": "status: rolled_back", "width": 150,
+      "sources": [{ "path": "backend/app/services/push.py", "line": 441, "end_line": 450, "label": "unreachable" }] }
   ],
   "edges": [
-    {
-      "id": "form-validate",
-      "from": "form",
-      "to": "validate",
-      "label": "plan"
-    },
-    {
-      "id": "validate-preview",
-      "from": "validate",
-      "to": "preview",
-      "variant": "emphasis"
-    },
-    {
-      "id": "preview-approval",
-      "from": "preview",
-      "to": "approval",
-      "label": "create job"
-    },
-    {
-      "id": "approval-connect",
-      "from": "approval",
-      "to": "connect",
-      "label": "run + creds",
-      "variant": "emphasis"
-    },
-    {
-      "id": "connect-checks",
-      "from": "connect",
-      "to": "checks",
-      "label": "find mgmt IP"
-    },
-    {
-      "id": "checks-apply",
-      "from": "checks",
-      "to": "apply",
-      "label": "safe",
-      "variant": "emphasis"
-    },
-    {
-      "id": "apply-verify",
-      "from": "apply",
-      "to": "verify"
-    },
-    {
-      "id": "verify-save",
-      "from": "verify",
-      "to": "save",
-      "label": "all checks pass",
-      "variant": "emphasis"
-    },
-    {
-      "id": "validate-rejected",
-      "from": "validate",
-      "to": "rejected",
-      "label": "invalid",
-      "variant": "security",
-      "role": "error"
-    },
-    {
-      "id": "checks-blocked",
-      "from": "checks",
-      "to": "blocked",
-      "label": "rule hit",
-      "variant": "security",
-      "role": "error"
-    },
-    {
-      "id": "apply-rollback",
-      "from": "apply",
-      "to": "rollback",
-      "label": "CLI error",
-      "variant": "security",
-      "role": "error"
-    },
-    {
-      "id": "verify-rollback",
-      "from": "verify",
-      "to": "rollback",
-      "label": "fail / unreachable",
-      "variant": "security",
-      "role": "error"
-    }
+    { "id": "form-validate", "from": "form", "to": "validate", "label": "plan", "role": "main" },
+    { "id": "validate-create", "from": "validate", "to": "create", "label": "preview OK", "variant": "emphasis", "role": "main" },
+    { "id": "create-approval", "from": "create", "to": "approval", "label": "production", "role": "main" },
+    { "id": "approval-run", "from": "approval", "to": "run", "label": "approved", "variant": "emphasis", "role": "main" },
+    { "id": "run-recheck", "from": "run", "to": "recheck", "role": "main" },
+    { "id": "recheck-connect", "from": "recheck", "to": "connect", "label": "queued", "variant": "emphasis", "role": "main" },
+    { "id": "connect-prechecks", "from": "connect", "to": "prechecks", "role": "main" },
+    { "id": "prechecks-apply", "from": "prechecks", "to": "apply", "label": "safe", "variant": "emphasis", "role": "main" },
+    { "id": "apply-verify", "from": "apply", "to": "verify", "role": "main" },
+    { "id": "validate-rejected", "from": "validate", "to": "rejected", "label": "invalid", "variant": "security", "role": "error" },
+    { "id": "connect-stopped", "from": "connect", "to": "stopped", "label": "key changed", "variant": "security", "role": "error" },
+    { "id": "prechecks-blocked", "from": "prechecks", "to": "blocked", "label": "rule hit", "variant": "security", "role": "error" },
+    { "id": "apply-rollback", "from": "apply", "to": "rollback", "label": "CLI error", "variant": "security", "role": "error" },
+    { "id": "verify-timer", "from": "verify", "to": "timer", "label": "unreachable", "variant": "security", "role": "error" }
   ],
   "cards": [
-    {
-      "dot": "rose",
-      "title": "Safety gates",
-      "items": [
-        "Denylist runs on the final command list",
-        "Management interface cannot be shut, moved or re-addressed",
-        "Telnet only to loopback / RFC1918 lab consoles"
-      ]
-    },
-    {
-      "dot": "amber",
-      "title": "Rollback strategy",
-      "items": [
-        "Cisco: archive + configure terminal revert timer, then configure confirm",
-        "Junos: commit confirmed, then commit",
-        "Others: restore the saved backup"
-      ]
-    },
-    {
-      "dot": "cyan",
-      "title": "Credentials",
-      "items": [
-        "Supplied only at run time, after approval",
-        "Held as SecretStr and wiped at any terminal state"
-      ]
-    }
+    { "dot": "rose", "title": "Safety gates", "items": [
+      "Denylist on every final command list, custom commands too",
+      "Management port cannot be shut, moved or re-addressed",
+      "Run refused if the plan, catalog or device address changed",
+      "Lab devices skip approval; production needs another admin" ] },
+    { "dot": "amber", "title": "Device safety window", "items": [
+      "Cisco: configure terminal revert timer, then configure confirm",
+      "Junos: commit confirmed N, then commit",
+      "EOS: session commit timer; AOS-CX: checkpoint auto",
+      "Experimental drivers: no timer, restore the saved backup",
+      "A failed verify check also rolls back, and nothing is saved" ] },
+    { "dot": "cyan", "title": "Credentials", "items": [
+      "Entered only at run time, after approval",
+      "SecretStr in a memory-only vault, removed when the job ends",
+      "Masked in commands, device output and backups" ] }
   ]
 }

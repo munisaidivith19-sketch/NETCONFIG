@@ -171,6 +171,6 @@ verification passes does the app confirm and save."
 | Device passwords never stored: after a push, open the job in History (and in MongoDB Compass, `jobs`) and search for the password | `pytest tests/push/test_engine.py -k "secrets_scrubbed or running_config_never" -v` |
 | Secrets masked in commands, output and backups | `pytest tests/unit/test_masking.py -v` |
 | No stack traces to the browser | `pytest tests/security/test_guard.py -k "500 or unhandled" -v` |
-| Remote mode needs HTTPS | `$env:HOST="0.0.0.0"; $env:ALLOW_REMOTE="true"; .venv\Scripts\python -m app` refuses to start without `SSL_CERTFILE`/`SSL_KEYFILE` |
+| Remote mode needs HTTPS | `$env:HOST="192.168.1.10"; $env:ALLOW_REMOTE="true"; .venv\Scripts\python -m app` refuses to start without `SSL_CERTFILE`/`SSL_KEYFILE` (and `HOST=0.0.0.0` is refused outright) |
 | AI prompt injection and secret masking | `pytest tests/api/test_ai.py -k "injection or secrets_never" -v` |
 | Audit chain detects tampering | `pytest tests/security/test_auth.py -k chain -v` |

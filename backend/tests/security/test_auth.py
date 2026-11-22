@@ -1,6 +1,7 @@
 """Authentication, sessions, lockout, RBAC (TEST_PLAN S9–S15, S20–S21)."""
 
 import re
+from datetime import timedelta
 
 import pytest
 from fastapi import APIRouter
@@ -8,6 +9,7 @@ from fastapi.routing import APIRoute
 
 from app.main import ROUTERS
 from app.security.rbac import PUBLIC_ROUTES, assert_all_routes_protected, iter_api_routes, route_role
+from app.services import users as users_service
 from app.services.audit import verify_chain
 from tests.conftest import PASSWORDS
 
@@ -163,16 +165,31 @@ def test_lockout_after_five_failures(client, users, fake_clock):
     assert client.post("/api/auth/login", json=good).status_code == 200
 
 
-def test_lockout_counts_parallel_failures(db, settings, users, monkeypatch):
+@pytest.fixture()
+def stale_viewer(db, users, monkeypatch):
+    """Every authenticate() call sees the viewer as it was read now, as parallel requests that all read the user
+    before any of them wrote would."""
+    stale = db.users.find_one({"username": "viewer"})
+    monkeypatch.setattr(users_service, "find_by_username", lambda _db, _name: dict(stale))
+    return stale
+
+
+def test_lockout_counts_parallel_failures(db, settings, stale_viewer):
     """Each wrong guess is counted in the database ($inc). A read-add-write counter would let parallel guesses
     (all reading failed_logins=0) overwrite each other and never lock the account."""
-    from app.services import users as users_service
-
-    stale = db.users.find_one({"username": "viewer"})  # what every parallel request read before checking
-    monkeypatch.setattr(users_service, "find_by_username", lambda _db, _name: dict(stale))
     results = [users_service.authenticate(db, settings, "viewer", "Wrong-password-1")[1] for _ in range(5)]
     assert results == ["bad_password"] * 4 + ["locked_now"]
     assert db.users.find_one({"username": "viewer"})["locked_until"] is not None
+
+
+def test_correct_password_does_not_clear_a_lock_set_meanwhile(db, settings, stale_viewer, fake_clock):
+    """A correct guess read the user before parallel wrong guesses locked the account (all in bcrypt at once).
+    It must not clear that new lock."""
+    stale = stale_viewer
+    db.users.update_one({"_id": stale["_id"]}, {"$set": {"locked_until": fake_clock() + timedelta(minutes=15)}})
+    user, reason = users_service.authenticate(db, settings, "viewer", PASSWORDS["viewer"])
+    assert user is None and reason == "locked"
+    assert db.users.find_one({"_id": stale["_id"]})["locked_until"] is not None
 
 
 def test_login_rate_limited(client, users):

@@ -122,21 +122,21 @@ Status before the review → after. Each `PARTIAL` was fixed in this phase with 
 | Rule | Status | Evidence (file:line) |
 |---|---|---|
 | 8.1 Bind 127.0.0.1 by default | PASS | `app/config.py:17` |
-| 8.1 Remote bind needs ALLOW_REMOTE, **HTTPS** and login, and warns | PARTIAL → PASS (HTTPS was not enforced) | `app/config.py:85`, `app/__main__.py`, `app/security/guard.py:53` (HSTS); test `test_refuses_non_local_bind_without_allow_remote_and_https` |
+| 8.1 Remote bind needs ALLOW_REMOTE, **HTTPS** and login, and warns | PARTIAL → PASS (HTTPS was not enforced). 5C review: a wildcard `HOST=0.0.0.0` is refused (no browser sends it as Host, so the allowlist could not name the real address); half an HTTPS setup is refused; origins follow what is really served; HSTS only in remote mode (on `localhost` it would pin every port for a year) | `app/config.py` `check_bind_address`, `hsts`; `app/security/guard.py` (HSTS); tests `test_refuses_non_local_bind_without_allow_remote_and_https`, `test_https_files_checked_on_every_bind`, `test_origin_scheme_follows_what_is_served`, `test_https_on_localhost_secure_cookie_without_hsts` |
 | 8.1 Host header allowlist | PASS | `app/config.py:67`, `app/security/guard.py:93` |
 | 8.1 Origin check and custom header on state-changing requests | PASS | `app/security/guard.py:104`, `:109` |
 | 8.1 No CORS; preflights refused | PASS | `app/security/guard.py:97` |
 | 8.1 CSP, nosniff, frame-ancestors, Referrer-Policy | PASS | `app/security/guard.py:26` |
 | 8.1 `/docs` off in production | PASS | `app/main.py:61` |
 | 8.2 bcrypt ≥ 12, 12-character minimum | PASS | `app/config.py:36`, `app/security/passwords.py:5` |
-| 8.2 Lockout after 5 failures for 15 min | PARTIAL → PASS (read-modify-write counter could undercount parallel guesses) | `app/services/users.py:64`; test `test_lockout_counts_parallel_failures` |
+| 8.2 Lockout after 5 failures for 15 min | PARTIAL → PASS (read-modify-write counter could undercount parallel guesses; 5C review: a correct guess that was in bcrypt while parallel guesses locked the account cleared the new lock, so success now only clears an account that is still unlocked) | `app/services/users.py` `authenticate`; tests `test_lockout_counts_parallel_failures`, `test_correct_password_does_not_clear_a_lock_set_meanwhile` |
 | 8.2 httpOnly SameSite=Strict cookie; server-side session with TTL, 8 h / 30 min | PASS | `app/api/auth.py:27`, `app/security/sessions.py:48`, `app/db.py:37` |
 | 8.2 Roles checked on the server for every route | PASS | `app/security/rbac.py:32`, `:85` |
 | 8.2 Two-person approval with a different approver | PASS | `app/services/jobs.py:262` |
 | 8.2 First admin via interactive script with getpass | PASS | `scripts/create_user.py:32` |
 | 8.3 Credentials only at push time, in memory, wiped at job end | PASS (see limitation 7.1) | `app/models/job.py:19`, `app/services/jobs.py:76` |
 | 8.3 Never in MongoDB, logs, job records, exceptions | PASS | `app/services/push.py:64`, `app/errors.py:76` |
-| 8.3 Never in the browser's storage | PARTIAL → PASS (device secret fields used `autocomplete="new-password"`, which invites the browser to save them) | `frontend/src/components/ui.jsx:148`, `RunForm.jsx` |
+| 8.3 Never in the browser's storage | PARTIAL → PASS (device secret fields carry the password-manager opt-outs `NO_SAVE`; every password field is a `SecretInput` with `autocomplete="new-password"`, because Chromium ignores `off` there and would autofill the engineer's saved NetConfig password into a device's new local admin password) | `frontend/src/components/ui.jsx` `NO_SAVE`/`SecretInput` (test `SecretInput.test.jsx`), `RunForm.jsx`, `Devices.jsx`, `Overview.jsx` |
 | 8.3 Netmiko session log off | PASS | `app/services/connection.py:182` |
 | 8.3 Masking of secret lines | PASS | `app/security/masking.py:8` |
 | 8.4 `extra="forbid"`, max lengths and list sizes | PASS | `app/models/common.py:13`, `app/models/plan.py` |
@@ -146,7 +146,7 @@ Status before the review → after. Each `PARTIAL` was fixed in this phase with 
 | 8.4 Text allowlists (hostname, banner, description) | PASS | `app/models/plan.py:15` |
 | 8.4 Queries from validated fields only | PASS | `app/api/devices.py:130` (escaped and pattern-checked) |
 | 8.5 Push flow: backup → pre-checks → apply → verify → save/rollback | PASS | `app/services/push.py:179`, `:189`, `:411` |
-| 8.5 Denylist on whole commands (abbreviations, `do`, case, spaces, several per line) | PARTIAL → PASS (features that store a command and run it later got past it: IOS `event manager`/`kron`/`alias`, EOS `event-handler`/`schedule`/`alias`/`daemon`, Junos `set event-options`/`set system scripts`) | `app/services/safety.py:17`, each driver's `denylist()`; tests `test_cisco_deferred_execution_blocked`, `test_driver_denylist` |
+| 8.5 Denylist on whole commands (abbreviations, `do`, case, spaces, several per line) | PARTIAL → PASS (features that store a command and run it later got past it: IOS `event manager`/`kron`/`alias`/`macro`, EOS `event-handler`/`schedule`/`alias`/`daemon`, Junos `set event-options`/`set system scripts`, AOS-CX `job`/`schedule`/`alias`). A keyword list cannot be complete: see limitation 10 | `app/services/safety.py:17`, each driver's `denylist()`; tests `test_cisco_deferred_execution_blocked`, `test_driver_denylist` |
 | 8.5 Custom commands off for production, checked and audited elsewhere | PASS | `app/services/planning.py:105` |
 | 8.5 Management-interface protection | PASS | `app/services/safety.py:131` |
 | 8.5 Stop at the first CLI error and report the command | PASS | `app/services/push.py:93`, `app/drivers/base.py:127` |
@@ -190,3 +190,8 @@ Status before the review → after. Each `PARTIAL` was fixed in this phase with 
    with the automated tests or in the lab.
 9. **Self-signed certificates for remote mode** are the engineer's responsibility. The app refuses to start
    remote mode without a certificate and key, but it does not check who issued the certificate.
+10. **The custom-commands box is checked against a denylist, not an allowlist.** Each vendor has features that
+    store CLI text and run it later (schedulers, event handlers, macros, aliases). The known ones are denied, but
+    a new firmware feature would get past the list until it is added. Custom commands are off for production
+    devices and audited elsewhere. An allowlist of top-level commands per driver is the stronger fix
+    (`docs/TECH_DEBT.md`).

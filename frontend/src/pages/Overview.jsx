@@ -8,7 +8,7 @@ import { STATUS } from '../lib/jobs.js'
 import { reveal, stacked } from '../lib/scroll.js'
 import TopologyMap from '../components/TopologyMap.jsx'
 import { BarList, StackedColumns, TableToggle, TrendLine } from '../components/charts.jsx'
-import { Alert, Badge, Empty, ErrorNote, Field, NO_SAVE, PageHeader, Panel, Skeleton, SkeletonRows, formatDate } from '../components/ui.jsx'
+import { Alert, Badge, Empty, ErrorNote, Field, NO_SAVE, PageHeader, Panel, SecretInput, Skeleton, SkeletonRows, formatDate } from '../components/ui.jsx'
 
 const REFRESH_MS = 30000
 const OUTCOMES = [
@@ -70,10 +70,10 @@ function DiscoverForm({ device, onDone }) {
           {(p) => <input {...p} className="input" value={form.username} onChange={set('username')} maxLength={64} {...NO_SAVE} />}
         </Field>
         <Field label="Device password" error={fields.password}>
-          {(p) => <input {...p} className="input" type="password" value={form.password} onChange={set('password')} maxLength={128} {...NO_SAVE} />}
+          {(p) => <SecretInput {...p} value={form.password} onChange={set('password')} />}
         </Field>
         <Field label="Enable secret (optional)" error={fields.enable_secret} hint="Only if the device asks for one">
-          {(p) => <input {...p} className="input" type="password" value={form.enable_secret} onChange={set('enable_secret')} maxLength={128} {...NO_SAVE} />}
+          {(p) => <SecretInput {...p} value={form.enable_secret} onChange={set('enable_secret')} />}
         </Field>
       </div>
       <div className="form-actions">

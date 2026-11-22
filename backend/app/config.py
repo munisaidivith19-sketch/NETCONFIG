@@ -8,10 +8,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
+# A wildcard bind listens everywhere, but browsers never send it as their Host header, so the allowlist could
+# not name the address people really use. Remote mode binds to one address of this PC instead.
+WILDCARD_HOSTS = {"0.0.0.0", "::", ""}  # noqa: S104  # nosec B104 - the list of addresses that are refused
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=BACKEND_DIR / ".env", extra="ignore")
+    # env_ignore_empty: "SSL_CERTFILE=" (as copied from .env.example) means "not set", not Path(".") – which would
+    # turn HTTPS on with no certificate – and "AI_API_KEY=" is no key, not an empty one.
+    model_config = SettingsConfigDict(env_file=BACKEND_DIR / ".env", extra="ignore", env_ignore_empty=True)
 
     env: Literal["development", "production", "test"] = "development"
     host: str = "127.0.0.1"
@@ -64,6 +69,12 @@ class Settings(BaseSettings):
         return self.cookie_secure or self.https
 
     @property
+    def hsts(self) -> bool:
+        # Only in remote mode: HSTS for "localhost" would force https on every localhost port (also the Vite dev
+        # server) for a year, even after HTTPS is turned off again.
+        return self.https and self.host not in LOCAL_HOSTS
+
+    @property
     def allowed_hosts(self) -> set[str]:
         hosts = {f"127.0.0.1:{self.port}", f"localhost:{self.port}", f"[::1]:{self.port}"}
         if self.allow_remote and self.host not in LOCAL_HOSTS:
@@ -72,7 +83,7 @@ class Settings(BaseSettings):
 
     @property
     def allowed_origins(self) -> set[str]:
-        scheme = "https" if self.secure_cookies else "http"
+        scheme = "https" if self.https else "http"  # what the server really serves
         origins = {f"{scheme}://{h}" for h in self.allowed_hosts}
         if not self.is_production:
             origins.add(self.dev_origin)
@@ -84,8 +95,18 @@ class Settings(BaseSettings):
 
     def check_bind_address(self) -> None:
         """Listening beyond localhost needs ALLOW_REMOTE=true *and* HTTPS (CLAUDE.md 8.1); login is always on."""
+        if (self.ssl_certfile is None) != (self.ssl_keyfile is None):
+            raise RuntimeError("HTTPS needs both SSL_CERTFILE and SSL_KEYFILE (or neither).")
+        missing = [str(p) for p in (self.ssl_certfile, self.ssl_keyfile) if p and not p.is_file()]
+        if missing:
+            raise RuntimeError("HTTPS file not found: " + ", ".join(missing))
         if self.host in LOCAL_HOSTS:
             return
+        if self.host in WILDCARD_HOSTS:
+            raise RuntimeError(
+                f"Refusing to bind to {self.host!r}: set HOST to this PC's own address on the engineering network "
+                "(for example 192.168.1.10). Only that address is accepted in the Host header."
+            )
         if not self.allow_remote:
             raise RuntimeError(
                 f"Refusing to bind to {self.host}: set ALLOW_REMOTE=true, SSL_CERTFILE and SSL_KEYFILE "
@@ -96,6 +117,3 @@ class Settings(BaseSettings):
                 f"Refusing to bind to {self.host} without HTTPS: set SSL_CERTFILE and SSL_KEYFILE "
                 "(PEM certificate and key)."
             )
-        missing = [str(p) for p in (self.ssl_certfile, self.ssl_keyfile) if not p.is_file()]
-        if missing:
-            raise RuntimeError("HTTPS file not found: " + ", ".join(missing))
