@@ -22,7 +22,7 @@ services:
       - key: SIMULATE_DEVICES
         value: "true"
       - key: PUBLIC_HOST
-        value: netconfig.munisaidivtih.in
+        sync: false # asked at creation: first the Render address (netconfig-demo.onrender.com), later your own domain
       - key: HOST
         value: 0.0.0.0
       - key: MONGO_URI
