@@ -1,0 +1,37 @@
+# Render blueprint for the PUBLIC DEMO only (docs/DEPLOY_RENDER.md).
+# The real NetConfig Studio runs on the engineer's laptop inside the network; a cloud host cannot reach devices,
+# so DEMO_MODE forces simulated devices and refuses to start if any demo setting is missing.
+services:
+  - type: web
+    name: netconfig-demo
+    runtime: python
+    plan: free
+    region: singapore
+    buildCommand: pip install -r backend/requirements.txt && cd frontend && npm ci && npm run build
+    startCommand: cd backend && python -m app
+    autoDeploy: false
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: NODE_VERSION
+        value: 22.12.0
+      - key: ENV
+        value: production
+      - key: DEMO_MODE
+        value: "true"
+      - key: SIMULATE_DEVICES
+        value: "true"
+      - key: PUBLIC_HOST
+        value: netconfig.munisaidivtih.in
+      - key: HOST
+        value: 0.0.0.0
+      - key: MONGO_URI
+        sync: false # secret: paste the Atlas connection string in the Render dashboard, never in this file
+      - key: MONGO_DB
+        value: netconfig_demo
+      - key: MONGO_TIMEOUT_MS
+        value: "10000"
+      - key: AI_PROVIDER
+        value: "off"
+      - key: ENABLE_EXPERIMENTAL_DRIVERS
+        value: "false"

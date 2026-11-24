@@ -243,6 +243,10 @@ def discover_device(device_id: str, body: DiscoverRequest, request: Request,
 def read_onvif(device_id: str, body: OnvifRequest, request: Request, user: SessionUser = Depends(require_engineer),
                db: Database = Depends(get_db)) -> DeviceOut:
     """Read a camera's ONVIF device information (read only). The login is used for this request only."""
+    if request.app.state.settings.demo_mode:
+        # A real HTTP request to the address in the device record: on a public server that would let visitors
+        # make the server call any address they like (SSRF). There is no simulated camera.
+        raise ApiError(403, "Reading cameras is turned off in the public demo.")
     doc = db.devices.find_one({"_id": oid(device_id)})
     if not doc:
         raise ApiError(404, "Device not found.")

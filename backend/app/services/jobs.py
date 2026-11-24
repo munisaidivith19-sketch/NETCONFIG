@@ -331,6 +331,8 @@ class JobRunner:
         self.recovered = threading.Event()
         self.startup_retry_seconds = 5.0
         if connector is None:
+            if settings.demo_mode and not settings.simulate_devices:  # also refused by Settings.check_demo
+                raise RuntimeError("DEMO_MODE needs SIMULATE_DEVICES=true: the public demo never reaches real devices.")
             if settings.simulate_devices:
                 from .simulator import SimulatedConnector
                 connector = SimulatedConnector()

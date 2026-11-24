@@ -12,4 +12,4 @@ router = APIRouter(prefix="/api", tags=["health"])
 @router.get("/health")
 def health(db: Database = Depends(get_db), settings: Settings = Depends(get_settings)) -> dict:
     return {"status": "ok", "version": __version__, "mongo": "ok" if ping(db) else "down",
-            "simulation": settings.simulate_devices}
+            "simulation": settings.simulate_devices, "demo": settings.demo_mode}

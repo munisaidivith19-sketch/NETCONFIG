@@ -17,7 +17,10 @@ def main() -> None:
         host=settings.host,
         port=settings.port,
         reload="--reload" in sys.argv,
-        proxy_headers=False,
+        # Demo on Render: the host's proxy is the only way in, so its X-Forwarded-For is the visitor's real
+        # address (needed for the per-IP login rate limit). Locally nothing sits in front, so it is never trusted.
+        proxy_headers=settings.demo_mode,
+        forwarded_allow_ips="*" if settings.demo_mode else None,
         server_header=False,
         log_level="info",
         ssl_certfile=str(settings.ssl_certfile) if settings.https else None,

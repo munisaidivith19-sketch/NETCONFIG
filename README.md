@@ -39,7 +39,20 @@ cd frontend; npm run dev                                          # UI  on http:
 ```
 Open http://127.0.0.1:5173. Vite forwards `/api` to the backend, so the browser sees one origin.
 
-## Run (daily use, one process)
+## Run everything with one command
+```powershell
+python run.py              # production mode; does any missing setup first, opens the browser
+python run.py --demo       # simulated device instead of the network (demos, no lab needed)
+python run.py --dev        # backend auto-reload + Vite dev server on :5173
+python run.py --test       # backend + frontend tests
+```
+`run.py` (standard library only) creates `backend\.venv`, installs the pinned packages when
+`requirements.txt` changes, creates `backend\.env`, checks the settings and MongoDB, offers to create the first
+admin, installs and builds the frontend, then starts the app. Every step prints OK or FAIL. A failure shows
+what went wrong, the last lines of output and how to fix it (MongoDB not running, port in use, a bad `.env`
+value, no internet, ...).
+
+## Run (daily use, one process, PowerShell)
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\start.ps1        # -NoBrowser to skip opening the browser
 ```
@@ -57,6 +70,10 @@ $env:SIMULATE_DEVICES="true"; .venv\Scripts\python -m app
 Add a device (for example model *Cisco IOSvL2*, management IP `10.0.0.2`), then Configure → Preview →
 Create job → enter any username and password (the password `wrong` simulates a login failure) → Run.
 Real testing uses GNS3 / CML: follow `docs/LAB_TESTING.md`.
+
+**Public online demo** (Render + MongoDB Atlas, simulated devices only, `DEMO_MODE=true`): step by step in
+**[docs/DEPLOY_RENDER.md](docs/DEPLOY_RENDER.md)**. The real tool is never deployed to the cloud – it must sit
+inside the network it configures.
 
 ## Live overview (Phase 4B)
 The **Overview** page is the home page. Everything on it comes from the backend (`GET /api/overview`):

@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     enable_experimental_drivers: bool = False
     # Development only: pushes go to an in-memory simulated device instead of the network (demo / tests).
     simulate_devices: bool = False
+    # Public demo on a cloud host (Render): simulated devices only, behind the host's HTTPS proxy, one public
+    # hostname. Never reaches a real device. See docs/DEPLOY_RENDER.md.
+    demo_mode: bool = False
+    public_host: str = Field(default="", max_length=253, pattern=r"^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9-]*$")
     # Background ping + port check of every device with a management address (0 turns it off).
     status_poll_seconds: int = Field(default=60, ge=0, le=86400)
     # AI assistant (Phase 5A, optional). Free options only: local Ollama or a hosted free tier. "off" sends nothing.
@@ -66,16 +70,20 @@ class Settings(BaseSettings):
 
     @property
     def secure_cookies(self) -> bool:
-        return self.cookie_secure or self.https
+        # Demo: the browser talks HTTPS to the host's proxy, even though the proxy talks plain HTTP to us.
+        return self.cookie_secure or self.https or self.demo_mode
 
     @property
     def hsts(self) -> bool:
         # Only in remote mode: HSTS for "localhost" would force https on every localhost port (also the Vite dev
         # server) for a year, even after HTTPS is turned off again.
-        return self.https and self.host not in LOCAL_HOSTS
+        return (self.https and self.host not in LOCAL_HOSTS) or self.demo_mode
 
     @property
     def allowed_hosts(self) -> set[str]:
+        if self.demo_mode:
+            # Only the public name: the proxy forwards the browser's Host header unchanged (on port 443).
+            return {self.public_host}
         hosts = {f"127.0.0.1:{self.port}", f"localhost:{self.port}", f"[::1]:{self.port}"}
         if self.allow_remote and self.host not in LOCAL_HOSTS:
             hosts.add(f"{self.host}:{self.port}")
@@ -83,6 +91,8 @@ class Settings(BaseSettings):
 
     @property
     def allowed_origins(self) -> set[str]:
+        if self.demo_mode:
+            return {f"https://{self.public_host}"}
         scheme = "https" if self.https else "http"  # what the server really serves
         origins = {f"{scheme}://{h}" for h in self.allowed_hosts}
         if not self.is_production:
@@ -90,11 +100,34 @@ class Settings(BaseSettings):
         return origins
 
     def check_simulation(self) -> None:
-        if self.simulate_devices and self.is_production:
+        # The public demo is the one production setup that must simulate: it has no network to reach.
+        if self.simulate_devices and self.is_production and not self.demo_mode:
             raise RuntimeError("SIMULATE_DEVICES=true is not allowed with ENV=production.")
 
+    def check_demo(self) -> None:
+        """DEMO_MODE is all or nothing: every setting that keeps a public demo away from real devices must hold."""
+        if not self.demo_mode:
+            return
+        problems = []
+        if not self.public_host or "." not in self.public_host:
+            problems.append("PUBLIC_HOST must be the demo's domain name (for example nettool.example.com)")
+        if not self.is_production:
+            problems.append("ENV must be production (no /docs, no dev origin)")
+        if not self.simulate_devices:
+            problems.append("SIMULATE_DEVICES must be true (a cloud host cannot reach real devices)")
+        if self.allow_remote or self.https:
+            problems.append("ALLOW_REMOTE and SSL_CERTFILE/SSL_KEYFILE must be unset (the host's proxy does HTTPS)")
+        if self.ai_provider != "off":
+            problems.append("AI_PROVIDER must be off (public visitors would spend the API key)")
+        if problems:
+            raise RuntimeError("DEMO_MODE=true needs: " + "; ".join(problems) + ".")
+
     def check_bind_address(self) -> None:
-        """Listening beyond localhost needs ALLOW_REMOTE=true *and* HTTPS (CLAUDE.md 8.1); login is always on."""
+        """Listening beyond localhost needs ALLOW_REMOTE=true *and* HTTPS (CLAUDE.md 8.1); login is always on.
+        The public demo is the exception: the cloud host's proxy is the only way in and it does the HTTPS."""
+        if self.demo_mode:
+            self.check_demo()
+            return
         if (self.ssl_certfile is None) != (self.ssl_keyfile is None):
             raise RuntimeError("HTTPS needs both SSL_CERTFILE and SSL_KEYFILE (or neither).")
         missing = [str(p) for p in (self.ssl_certfile, self.ssl_keyfile) if p and not p.is_file()]

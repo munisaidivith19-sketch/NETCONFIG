@@ -43,7 +43,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # starts (/api/health reports "down") and these are retried in the background until it is.
         app.state.runner.start(prepare_db)
         app.state.poller.start()
-        if settings.simulate_devices:
+        if settings.demo_mode:
+            log.warning("DEMO_MODE=true: public demo on https://%s with simulated devices only.", settings.public_host)
+        elif settings.simulate_devices:
             log.warning("SIMULATE_DEVICES=true: pushes go to simulated devices, not the network.")
         if settings.allow_remote:
             log.warning("ALLOW_REMOTE=true: NetConfig Studio is reachable from the network (HTTPS on %s:%s). "
