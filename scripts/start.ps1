@@ -48,7 +48,7 @@ if (-not (Test-Path "$index") -or (Get-Item "$index").LastWriteTime -lt $newest)
 # 4. Start. ENV=production: API docs off, simulation refused, no dev origin. Everything else comes from
 #    backend\.env, read by the app's own Settings (so the address and http/https here always match it).
 $env:ENV = "production"
-Remove-Item Env:SIMULATE_DEVICES -ErrorAction SilentlyContinue
+$env:SIMULATE_DEVICES = "false"  # beats a SIMULATE_DEVICES=true left in backend\.env
 Set-Location "$Backend"
 $where = & "$Py" -c "from app.config import Settings; s = Settings(); print(s.host, s.port, 'https' if s.https else 'http')"
 if ($LASTEXITCODE -ne 0) { Fail "backend\.env could not be read (see the error above)." }

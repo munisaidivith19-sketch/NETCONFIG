@@ -14,7 +14,12 @@ only on this PC; nobody else on the network can open it.
 - Five wrong passwords lock the account for 15 minutes. The message is the same whether the user name or the
   password was wrong.
 - You are signed out after 30 minutes without activity, and after 8 hours at the latest.
-- Change your password under your name (top right) → **Your account**. At least 12 characters.
+- Change your password under your name (bottom of the sidebar; top right on phones) → **Security** → *Change password*.
+  At least 12 characters; your other sessions are signed out.
+- Admins can reset another user's password on the same page (*Reset a user's password*). That user is
+  unlocked, signed out everywhere, and the reset is written to the audit log.
+- Forgot the only admin password? On the laptop, from `backend/`:
+  `.venv\Scripts\python scripts\create_user.py admin --reset` (you type the new password; it is never shown).
 
 ### What each role can do
 
@@ -41,6 +46,22 @@ device login once and the app runs only `show` commands to store the model, soft
 neighbours and VLAN table. The login is not stored. If the device runs a different OS or model than the
 inventory says, a warning appears. Fix the inventory before configuring it, because the commands would be
 wrong for that OS.
+
+### Topology (full-size map)
+
+**Topology** in the sidebar (**Map** on a phone), or **Full map** on the Overview map, opens the network map
+on its own page:
+
+- **Filters**: All, Up, Down, Not checked (with counts) and a search by device name or model. Links to a
+  device that is filtered out are hidden too.
+- **Legend**: green / red / grey dot for up / down / not checked; a thick green line is a link found by
+  LLDP or CDP, a thin grey line is an uplink you set under Devices (access points and cameras), and a red
+  dashed line goes to a device that is down. A dashed box is a neighbour that is not in your inventory.
+- **Connections**: a table of which port is connected to which (device, port, neighbour, its port, found
+  by). Select a device name to open it.
+- **Device** panel: the same as on Overview, including **Read device facts**.
+
+The map fills in as you read device facts: each read adds that device's LLDP/CDP neighbours.
 
 ## 3. Add a device
 

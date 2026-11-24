@@ -406,6 +406,31 @@ tr.clickable:hover td, tr.selected td { background: var(--neutral-soft); }
 .topology .status.down { fill: var(--danger-strong); }
 .topology .status.unknown { fill: var(--text-faint); }
 
+/* Topology page: filter + search row, map legend, device names in the connections table */
+.map-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.map-tools .segmented { margin-bottom: 0; flex-wrap: wrap; border-radius: var(--radius-xl); } /* wraps on a phone, never cut off */
+.map-tools .search { flex: 1 1 220px; max-width: 320px; }
+.map-legend i.dot { border-radius: 50%; }
+.map-legend i.dot.up { background: var(--success); }
+.map-legend i.dot.down { background: var(--danger-strong); }
+.map-legend i.dot.unknown { background: var(--text-faint); }
+.map-legend i.line { width: 22px; height: 0; border-radius: 0; border-top: 3px solid var(--accent); }
+.map-legend i.line.uplink { border-top: 2px solid var(--text-faint); }
+.map-legend i.line.down { border-top: 2px dashed var(--danger-strong); }
+.link-button {
+  min-height: var(--touch);
+  padding: 0 var(--space-1);
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--accent-strong);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.link-button:hover { color: var(--accent); }
+
 /* ---------- Charts ---------- */
 
 .chart { width: 100%; height: auto; display: block; overflow: visible; }
@@ -519,8 +544,7 @@ button.subnav-link { border: none; background: transparent; font: inherit; curso
 .choice svg { color: var(--accent-strong); }
 
 .section-card { padding: var(--space-4); border-radius: var(--radius-lg); background: var(--glass-subtle); border: 1px solid var(--glass-edge); }
-.section-card + .section-card { margin-top: var(--space-4); }
-.list-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)) auto; gap: var(--space-3); align-items: end; }
+.section-card + .section-card { margin-top: var(--space-4); }.list-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)) auto; gap: var(--space-3); align-items: end; }
 .list-row + .list-row { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px dashed var(--glass-edge); }
 
 .progress-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
@@ -573,6 +597,8 @@ details[open] > summary { margin-bottom: var(--space-3); }
   padding: var(--space-2);
   border-radius: var(--radius-lg);
 }
+/* In the sidebar the button sits at the bottom of the screen, so the panel opens upwards. */
+.sidebar .menu-panel { top: auto; bottom: calc(100% + var(--space-2)); left: 0; right: auto; }
 .menu-panel .menu-head { padding: var(--space-2) var(--space-3) var(--space-3); border-bottom: 1px solid var(--glass-edge); margin-bottom: var(--space-2); }
 .menu-panel button, .menu-panel a {
   display: flex; align-items: center; gap: var(--space-2);
@@ -675,7 +701,8 @@ details[open] > summary { margin-bottom: var(--space-3); }
 
 /* ---------- Overview (Phase 4B) ---------- */
 .topology .node.external { cursor: default; }
-.topology .node.external .node-bg { fill: transparent; stroke-dasharray: 4 4; }
+/* Plain page colour, not see-through: a link ends at the box edge instead of showing through it. */
+.topology .node.external .node-bg { fill: var(--bg); stroke-dasharray: 4 4; }
 .topology .node:focus-visible .node-bg { stroke: var(--accent); stroke-width: 3; }
 .chart-wrap { position: relative; display: flex; flex-direction: column; gap: var(--space-3); }
 .chart-hit.active rect:first-child { fill: var(--neutral-soft); }

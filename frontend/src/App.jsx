@@ -1,4 +1,4 @@
-import { Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout.jsx'
 import { RequireAuth } from './lib/auth.jsx'
 import Account from './pages/Account.jsx'
@@ -14,6 +14,7 @@ import Login from './pages/Login.jsx'
 import Overview from './pages/Overview.jsx'
 import NotFound from './pages/NotFound.jsx'
 import RouterLink from './pages/RouterLink.jsx'
+import Topology from './pages/Topology.jsx'
 
 export default function App() {
   return (
@@ -28,6 +29,7 @@ export default function App() {
       >
         <Route index element={<Overview />} />
         <Route path="devices" element={<Devices />} />
+        <Route path="topology" element={<Topology />} />
         <Route path="catalog" element={<Catalog />} />
         <Route
           path="configure"
@@ -41,7 +43,8 @@ export default function App() {
         <Route path="configure/bootstrap" element={<RequireAuth role="engineer"><Bootstrap /></RequireAuth>} />
         <Route path="history" element={<History />} />
         <Route path="history/:jobId" element={<History />} />
-        <Route path="account" element={<Account />} />
+        <Route path="settings" element={<Account />} />
+        <Route path="account" element={<Navigate to="/settings" replace />} />
         <Route path="admin/users" element={<RequireAuth role="admin"><Users /></RequireAuth>} />
         <Route path="admin/audit" element={<RequireAuth role="admin"><Audit /></RequireAuth>} />
         <Route path="admin/host-keys" element={<RequireAuth role="admin"><HostKeys /></RequireAuth>} />
