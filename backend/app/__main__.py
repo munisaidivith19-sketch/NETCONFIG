@@ -17,10 +17,9 @@ def main() -> None:
         host=settings.host,
         port=settings.port,
         reload="--reload" in sys.argv,
-        # Demo on Render: the host's proxy is the only way in, so its X-Forwarded-For is the visitor's real
-        # address (needed for the per-IP login rate limit). Locally nothing sits in front, so it is never trusted.
-        proxy_headers=settings.demo_mode,
-        forwarded_allow_ips="*" if settings.demo_mode else None,
+        # Off: uvicorn would believe a client-written X-Forwarded-For entry. The demo reads the header itself,
+        # counting only the entries its proxy added (app/security/clientip.py).
+        proxy_headers=False,
         server_header=False,
         log_level="info",
         ssl_certfile=str(settings.ssl_certfile) if settings.https else None,

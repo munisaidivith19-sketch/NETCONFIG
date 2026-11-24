@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     # Public demo on a cloud host (Render): simulated devices only, behind the host's HTTPS proxy, one public
     # hostname. Never reaches a real device. See docs/DEPLOY_RENDER.md.
     demo_mode: bool = False
+    # How many X-Forwarded-For entries, counted from the right, the host's own proxies wrote (app/security/clientip.py).
+    trusted_proxy_hops: int = Field(default=1, ge=1, le=5)
     public_host: str = Field(default="", max_length=253, pattern=r"^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9-]*$")
     # Background ping + port check of every device with a management address (0 turns it off).
     status_poll_seconds: int = Field(default=60, ge=0, le=86400)

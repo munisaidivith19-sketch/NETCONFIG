@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import create_app
+from app.security.clientip import forwarded_ip
 from app.services.simulator import SimulatedConnector
 from tests.conftest import PASSWORDS, make_settings
 
@@ -79,6 +80,36 @@ def test_demo_cookie_is_secure(db, users):
         cookie = r.headers["set-cookie"].lower()
         assert "secure" in cookie and "httponly" in cookie and "samesite=strict" in cookie
         assert "strict-transport-security" in r.headers
+
+
+@pytest.mark.parametrize(("peer", "xff", "hops", "expected"), [
+    ("10.1.2.3", ["203.0.113.77"], 1, "203.0.113.77"),                # normal: Render wrote the visitor's IP
+    ("10.1.2.3", ["1.2.3.4, 203.0.113.77"], 1, "203.0.113.77"),       # spoofed first entry is ignored
+    ("10.1.2.3", ["1.2.3.4", "203.0.113.77"], 1, "203.0.113.77"),     # same, as two header lines
+    ("10.1.2.3", ["1.2.3.4, 203.0.113.77, 10.9.9.9"], 2, "203.0.113.77"),  # two proxy hops
+    ("10.1.2.3", [], 1, "10.1.2.3"),                                  # no header: the peer
+    ("10.1.2.3", ["203.0.113.77"], 2, "10.1.2.3"),                    # fewer entries than hops: the peer
+    ("10.1.2.3", ["1.2.3.4, not-an-ip"], 1, "10.1.2.3"),              # garbage: the peer
+    ("8.8.8.8", ["1.2.3.4"], 1, "8.8.8.8"),                           # public peer = not via the proxy
+])
+def test_forwarded_ip(peer, xff, hops, expected):
+    assert forwarded_ip(peer, xff, hops) == expected
+
+
+def test_uvicorn_proxy_headers_stay_off():
+    import inspect
+
+    import app.__main__ as entry
+    assert "proxy_headers=False" in inspect.getsource(entry.main)
+
+
+def test_request_info_is_admin_only_and_ignores_header_locally(client_for):
+    viewer = client_for("viewer")
+    assert viewer.get("/api/health/request-info").status_code == 403
+    admin = client_for("admin")
+    r = admin.get("/api/health/request-info", headers={"X-Forwarded-For": "1.2.3.4"})
+    assert r.status_code == 200
+    assert r.json()["client_ip"] != "1.2.3.4"  # outside demo mode the header is never believed
 
 
 def test_demo_blocks_camera_reads(db, users):

@@ -99,7 +99,18 @@ custom domain is accepted (DNS-rebinding protection). Continue with step 5.
 4. Open `https://netconfig.munisaidivtih.in`, sign in as `demo`, add a device (any private IP; it is simulated),
    configure a VLAN and push. The yellow **Public demo** banner shows on every page.
 
-## Step 6 – After it works
+## Step 6 – Check the login rate limit sees your real IP
+
+Signed in as `admin`, open `https://netconfig.munisaidivtih.in/api/health/request-info`.
+`client_ip` must be **your own public IP** (compare with any "what is my IP" site), not a `10.x` address.
+
+- Shows a `10.x` / Render address → Render added more than one proxy entry: set `TRUSTED_PROXY_HOPS=2` in
+  Render's *Environment* tab and check again.
+- The app never uses uvicorn's `--forwarded-allow-ips=*`: that trusts the **first** `X-Forwarded-For` entry,
+  which the visitor writes, so anyone could pick a new fake IP per request and dodge the rate limit. It counts
+  entries from the right instead (`app/security/clientip.py`).
+
+## Step 7 – After it works
 
 - Free Render services **sleep after 15 minutes** without visitors; the first visit after that takes ~1 minute.
 - `autoDeploy` is off: deploy new code with **Manual Deploy → Deploy latest commit**.

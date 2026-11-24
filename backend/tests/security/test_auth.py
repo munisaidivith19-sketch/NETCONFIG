@@ -27,6 +27,7 @@ EXPECTED_ROLES = {
     ("DELETE", "/api/users/{user_id}"): "admin",
     ("GET", "/api/audit"): "admin",
     ("GET", "/api/audit/verify"): "admin",
+    ("GET", "/api/health/request-info"): "admin",
     ("GET", "/api/catalog/os-drivers"): "viewer",
     ("GET", "/api/catalog/brands"): "viewer",
     ("GET", "/api/catalog/series"): "viewer",
