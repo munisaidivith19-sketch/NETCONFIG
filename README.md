@@ -34,9 +34,12 @@ NetConfig Studio validates your plan, generates the correct commands for each ve
 [**Security**](#-security-by-design) ·
 [**Docs**](#-documentation)
 
+<br/>
+<img src="docs/assets/readme/stats.svg" alt="8 OS drivers, 448 automated tests, 9-step safe push, 0 device passwords stored" width="100%"/>
+
 </div>
 
----
+<p align="center"><img src="docs/assets/readme/divider.svg" width="100%" alt=""/></p>
 
 ## 🌐 Why NetConfig Studio
 
@@ -75,7 +78,7 @@ nobody keeps a record of what changed.
 > NetConfig Studio runs **on the engineer's own laptop, inside the network**, bound to `127.0.0.1`.
 > It is not a cloud app, because it has to reach the devices it configures.
 
----
+<p align="center"><img src="docs/assets/readme/divider.svg" width="100%" alt=""/></p>
 
 ## 🎬 See it work
 
@@ -84,9 +87,14 @@ nobody keeps a record of what changed.
 <br/><sub>A VLAN + access-port plan for a Cisco IOSvL2 switch. The commands shown come from the driver's real golden test files.</sub>
 </div>
 
----
+<p align="center"><img src="docs/assets/readme/divider.svg" width="100%" alt=""/></p>
 
 ## ✨ Features
+
+<div align="center">
+<img src="docs/assets/readme/switch.svg" alt="Animated 24-port switch: VLAN-coloured ports being configured, blinking link LEDs, protected management port" width="100%"/>
+<br/><sub>Ports are assigned to VLANs from a form. The wave shows a config push reaching each port; port names are checked against the model's naming pattern.</sub>
+</div>
 
 <table>
 <tr>
@@ -160,7 +168,7 @@ and usable down to a **375 px** phone screen.
 </tr>
 </table>
 
----
+<p align="center"><img src="docs/assets/readme/divider.svg" width="100%" alt=""/></p>
 
 ## 🏗️ Architecture
 
@@ -220,7 +228,7 @@ class Driver(Protocol):
 Full write-up: [docs/SYSTEM_DESIGN.md](docs/SYSTEM_DESIGN.md) · interactive diagrams in [docs/diagrams/](docs/diagrams/).
 </details>
 
----
+<p align="center"><img src="docs/assets/readme/divider.svg" width="100%" alt=""/></p>
 
 ## 🚦 The safe push pipeline
 
@@ -284,7 +292,7 @@ Matching is on **whole commands**, so `no shutdown` and `description reload-test
 
 </details>
 
----
+<p align="center"><img src="docs/assets/readme/divider.svg" width="100%" alt=""/></p>
 
 ## 🧩 Supported platforms
 
@@ -306,7 +314,7 @@ Matching is on **whole commands**, so `no shutdown` and `description reload-test
 > Until then, `production` pushes need `ENABLE_EXPERIMENTAL_DRIVERS=true`. 🧪 drivers are disabled unless that
 > flag is set, and are labelled in the UI. Per-driver notes: [docs/drivers/](docs/drivers/).
 
----
+<p align="center"><img src="docs/assets/readme/divider.svg" width="100%" alt=""/></p>
 
 ## 🚀 Quick start
 
@@ -399,7 +407,7 @@ Off by default. Set `AI_PROVIDER` in `backend\.env` to `ollama` (runs on this PC
   Engineers only, 10 requests per minute. Details: [docs/AI_ASSISTANT.md](docs/AI_ASSISTANT.md).
 </details>
 
----
+<p align="center"><img src="docs/assets/readme/divider.svg" width="100%" alt=""/></p>
 
 ## 🔒 Security by design
 
@@ -431,7 +439,7 @@ flowchart LR
 [docs/SECURITY_TESTING.md](docs/SECURITY_TESTING.md) (how to demo each control) ·
 [docs/ACCEPTED_RISKS.md](docs/ACCEPTED_RISKS.md)</sub>
 
----
+<p align="center"><img src="docs/assets/readme/divider.svg" width="100%" alt=""/></p>
 
 ## 🧰 Tech stack
 
@@ -443,7 +451,7 @@ flowchart LR
 <tr><td><b>Lab</b></td><td>GNS3 · Cisco CML-Free (IOSv, IOSvL2) · Juniper vJunos · Arista cEOS-lab · Aruba AOS-CX Simulator · MikroTik CHR</td></tr>
 </table>
 
----
+<p align="center"><img src="docs/assets/readme/divider.svg" width="100%" alt=""/></p>
 
 ## ✅ Testing
 
@@ -463,7 +471,7 @@ powershell -ExecutionPolicy Bypass -File scripts\check.ps1   # everything at onc
 
 <sub>Rewrite golden files after an intended change: `UPDATE_GOLDEN=1 .venv\Scripts\python -m pytest tests/drivers`, then review the diff.</sub>
 
----
+<p align="center"><img src="docs/assets/readme/divider.svg" width="100%" alt=""/></p>
 
 ## 📁 Project layout
 
@@ -484,7 +492,7 @@ NETCONFIG/
 └── scripts/                  dev-backend.ps1 · start.ps1 · check.ps1
 ```
 
----
+<p align="center"><img src="docs/assets/readme/divider.svg" width="100%" alt=""/></p>
 
 ## 🗺️ Roadmap
 
@@ -518,7 +526,7 @@ NETCONFIG/
 - [ ] SNMPv3 polling (needs the `pysnmp` library, waiting for approval)
 - [ ] Try the AI assistant against live providers
 
----
+<p align="center"><img src="docs/assets/readme/divider.svg" width="100%" alt=""/></p>
 
 ## 📚 Documentation
 
@@ -533,7 +541,7 @@ NETCONFIG/
 | [Deploy demo on Render](docs/DEPLOY_RENDER.md) | Public demo with simulated devices only |
 | [Release checklist](docs/RELEASE_CHECKLIST.md) · [Tech debt](docs/TECH_DEBT.md) · [Accepted risks](docs/ACCEPTED_RISKS.md) | Maintainers |
 
----
+<p align="center"><img src="docs/assets/readme/divider.svg" width="100%" alt=""/></p>
 
 <div align="center">
 
