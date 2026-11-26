@@ -1,27 +1,345 @@
-# NetConfig Studio
+<a id="top"></a>
+<div align="center">
 
-A local web app for network engineers: pick a device (category → brand → series → model), fill in
-your requirements (VLANs, ports, IP addressing, DHCP, NAT, routing, SSH), and NetConfig Studio validates
-them, generates the right commands for that device's OS, shows a preview, pushes them safely with
-backup and rollback, verifies the result, and records everything in an audit log.
+<img src="docs/assets/readme/hero.svg" alt="NetConfig Studio – multi-vendor network configuration platform" width="100%"/>
 
-It runs **on your own laptop, inside the network**, bound to `127.0.0.1`. It is not a cloud app.
+<br/>
 
-> Status: under construction, built phase by phase from `PROMPTS.md`. See [Progress](#progress).
+**Configure switches, Layer 3 switches, routers and access points from one form instead of one CLI command at a time.<br/>
+NetConfig Studio validates your plan, generates the correct commands for each vendor's OS, and pushes them with backup, verification and automatic rollback.**
 
-## Requirements (Windows 11, all free)
-- Python 3.12 (3.10 works for now – see `docs/ACCEPTED_RISKS.md`)
-- Node.js LTS (20+)
-- MongoDB Community Server, running as a Windows service on `127.0.0.1:27017`
-- Git
+<br/>
 
-## First-time setup
+![Python](https://img.shields.io/badge/Python-3.10_%7C_3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.162-009688?style=for-the-badge&logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)
+![Vite](https://img.shields.io/badge/Vite-8-646CFF?style=for-the-badge&logo=vite&logoColor=white)
+![MongoDB](https://img.shields.io/badge/MongoDB-local-47A248?style=for-the-badge&logo=mongodb&logoColor=white)
+<br/>
+![Netmiko](https://img.shields.io/badge/Netmiko-4.8-0B3D91?style=for-the-badge&logo=gnubash&logoColor=white)
+![Windows 11](https://img.shields.io/badge/Windows_11-native-0078D4?style=for-the-badge&logo=windows11&logoColor=white)
+![No Docker](https://img.shields.io/badge/Docker-not_needed-2b3137?style=for-the-badge&logo=docker&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-347_backend_·_101_frontend-34d399?style=for-the-badge&logo=pytest&logoColor=white)
+![Security](https://img.shields.io/badge/bind-127.0.0.1_only-ef4444?style=for-the-badge&logo=letsencrypt&logoColor=white)
+
+<br/>
+
+[**Why**](#-why-netconfig-studio) ·
+[**Demo**](#-see-it-work) ·
+[**Features**](#-features) ·
+[**Architecture**](#-architecture) ·
+[**Push pipeline**](#-the-safe-push-pipeline) ·
+[**Vendors**](#-supported-platforms) ·
+[**Quick start**](#-quick-start) ·
+[**Security**](#-security-by-design) ·
+[**Docs**](#-documentation)
+
+</div>
+
+---
+
+## 🌐 Why NetConfig Studio
+
+Network engineers still configure most devices **one command at a time in PuTTY**. Every vendor speaks a
+different CLI dialect, one typo can take a site offline, the first SSH setup needs a console cable, and
+nobody keeps a record of what changed.
+
+<table>
+<tr>
+<th width="50%">❌ The usual way</th>
+<th width="50%">✅ With NetConfig Studio</th>
+</tr>
+<tr>
+<td>
+
+- Look up the syntax for Cisco, then Junos, then AOS-CX…
+- Paste commands line by line into a terminal
+- Find a mistake only after the port goes down
+- Lose the management session by shutting the wrong interface
+- No backup, no rollback, no record of who changed what
+
+</td>
+<td>
+
+- Pick **category → brand → series → model** and fill in a form
+- Plan is **validated** (subnets, VLANs, port names, AS numbers)
+- **Preview** the exact commands for that device's OS
+- **Backup → apply → verify → confirm**, or roll back automatically
+- Every action goes to an **append-only, hash-chained audit log**
+
+</td>
+</tr>
+</table>
+
+> [!IMPORTANT]
+> NetConfig Studio runs **on the engineer's own laptop, inside the network**, bound to `127.0.0.1`.
+> It is not a cloud app, because it has to reach the devices it configures.
+
+---
+
+## 🎬 See it work
+
+<div align="center">
+<img src="docs/assets/readme/terminal.svg" alt="Animated terminal: a plan is validated, previewed as Cisco IOS commands, pushed with backup, verified and confirmed" width="85%"/>
+<br/><sub>A VLAN + access-port plan for a Cisco IOSvL2 switch. The commands shown come from the driver's real golden test files.</sub>
+</div>
+
+---
+
+## ✨ Features
+
+<table>
+<tr>
+<td width="33%" valign="top">
+
+### 🧭 Guided configuration
+5-step **Configure wizard**: VLANs, access and trunk ports, SVIs, routed interfaces, DHCP pools, NAT,
+static routes, **OSPF / EIGRP / BGP**, SSH and hardening. Templates save a form for reuse (never with passwords).
+
+</td>
+<td width="33%" valign="top">
+
+### 🔌 Multi-vendor drivers
+One driver per **OS family**, not per model. Each one is a pure generator with **golden-file tests**,
+and an unsupported feature gives a clear *"not supported on &lt;OS&gt;"* error instead of being skipped silently.
+
+</td>
+<td width="33%" valign="top">
+
+### 🛡️ Safe push engine
+Backup, management-interface protection, a command **denylist**, stop at the first CLI error,
+`show`-command verification, and rollback with the vendor's native mechanism.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### 🗺️ Live overview & topology
+Status polling (TCP/SSH or ping), read-only discovery of model, version, serial, **LLDP/CDP neighbours**
+and VLANs, a keyboard-navigable network map, and 14-day charts.
+
+</td>
+<td valign="top">
+
+### 🔗 Multi-device wizards
+Push the **same change to 2–20 switches**, build a matching **router-to-router link** (/30 or /31 + OSPF/EIGRP/eBGP
+on both sides), or do **first-time setup** over a serial or lab console.
+
+</td>
+<td valign="top">
+
+### 👥 Two-person approval
+Devices tagged `production` need a **different admin** to approve within 24 h. Commands are frozen with a
+**SHA-256 hash**, and the job only runs if the regenerated commands still match it.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### 🔐 Credentials never stored
+Device logins are typed **at push time**, held in memory as `SecretStr` for that job only, then wiped.
+Secrets in commands, output and backups are **masked**.
+
+</td>
+<td valign="top">
+
+### 🤖 Optional AI assistant
+Turn a sentence into a draft plan, or **explain** commands, a failed push or a config diff.
+Works with Ollama (local), Groq or Gemini. The AI never pushes anything itself.
+
+</td>
+<td valign="top">
+
+### 🎨 Polished, accessible UI
+"Liquid glass" light and dark themes, WCAG 2.1 AA contrast, full keyboard support, 44 px touch targets,
+and usable down to a **375 px** phone screen.
+
+</td>
+</tr>
+</table>
+
+---
+
+## 🏗️ Architecture
+
+```mermaid
+flowchart LR
+    subgraph LAPTOP["💻 Engineer's laptop · 127.0.0.1 only"]
+        direction LR
+        UI["⚛️ React UI<br/>served same-origin"]
+        API["⚡ FastAPI<br/>REST API · RBAC · CSRF · CSP"]
+        SVC["🧠 Services<br/>validation · safety · push · jobs · audit"]
+        DRV["🔌 Driver layer<br/>one driver per OS family"]
+        DB[("🍃 MongoDB<br/>catalog · inventory · jobs · audit")]
+        UI -->|"same-origin JSON"| API --> SVC --> DRV
+        SVC <--> DB
+    end
+
+    DRV -->|"Netmiko · SSH"| NET
+    DRV -.->|"serial / lab console<br/>(first-time setup)"| NET
+
+    subgraph NET["🌐 Network"]
+        direction TB
+        R["🛜 Routers"]
+        L3["🔀 L3 switches"]
+        SW["🔁 Switches"]
+        AP["📡 Access points"]
+        R --- L3 --- SW --- AP
+    end
+```
+
+<details>
+<summary><b>🔍 Why this design? (click to expand)</b></summary>
+<br/>
+
+| Decision | Reason | ADR |
+|---|---|---|
+| Runs locally, bound to `127.0.0.1` | It must reach the devices; a localhost app cannot be reached by others on the network | [0001](docs/adr/0001-local-app-bound-to-localhost.md) |
+| One driver per **OS family** | Commands depend on the OS, not the model; models are just catalog data | [0002](docs/adr/0002-os-driver-plugin-design.md) |
+| Netmiko instead of automating PuTTY | Same SSH / Telnet / serial access, but scriptable, testable and checkable for errors | [0003](docs/adr/0003-netmiko-instead-of-putty.md) |
+| Device credentials in memory only | A stolen database or log file contains no device passwords | [0004](docs/adr/0004-device-credentials-in-memory-only.md) |
+
+Every driver implements the same interface:
+
+```python
+class Driver(Protocol):
+    os_id: str
+    netmiko_device_type: str
+    capabilities: set[str]
+    def generate(self, plan, kind) -> list[str]: ...          # config commands (pure function)
+    def verify_commands(self, plan) -> list[str]: ...         # show commands
+    def check(self, plan, outputs) -> list[Check]: ...        # did it really work?
+    def error_patterns(self) -> list[str]: ...                # "% Invalid input", "syntax error" …
+    def save_command(self) -> str | None: ...
+    def rollback_strategy(self) -> str: ...                   # revert_timer | commit_confirmed | backup_restore
+    def management_interface(self, outputs, mgmt_ip) -> str | None: ...
+```
+
+Full write-up: [docs/SYSTEM_DESIGN.md](docs/SYSTEM_DESIGN.md) · interactive diagrams in [docs/diagrams/](docs/diagrams/).
+</details>
+
+---
+
+## 🚦 The safe push pipeline
+
+<div align="center">
+<img src="docs/assets/readme/pipeline.svg" alt="Animated pipeline: validate, preview, approve, connect, backup, pre-check, apply, verify, save, with rollback on failure" width="100%"/>
+</div>
+
+1. **Create job** (Configure step 4): the exact commands are frozen with a SHA-256 hash. No credentials yet.
+2. **Approval** (only devices tagged `production`): a *different* admin approves in History within 24 hours.
+3. **Run:** the device login is typed now, sent once, kept in memory for this job only and wiped when it ends.
+   The commands are regenerated and must match the approved hash.
+4. **Push engine:** connect (SSH host key checked) → back up `show running-config` → find the interface that
+   holds the management IP → denylist and management checks → apply inside `configure terminal revert timer N`
+   → stop at the first CLI error → verify with `show` commands → `configure confirm` → `write memory`.
+   Any error after applying → `configure revert now`. If the device becomes unreachable, its own timer restores the old config.
+5. **History** shows the timeline, checks, the masked transcript and the masked backup.
+
+<details>
+<summary><b>📊 Job life cycle – every state a job can be in (click to expand)</b></summary>
+<br/>
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> awaiting_approval: production device
+    [*] --> ready: lab device
+    awaiting_approval --> ready: approved by a 2nd user
+    awaiting_approval --> cancelled: rejected / withdrawn
+    awaiting_approval --> expired: no answer in 24 h
+    ready --> queued: engineer enters login and runs
+    queued --> connecting
+    connecting --> backing_up
+    backing_up --> checking
+    checking --> blocked: denylist / mgmt interface
+    checking --> applying
+    applying --> verifying
+    applying --> rolling_back: CLI error
+    verifying --> saving: checks pass
+    verifying --> rolling_back: check failed / unreachable
+    saving --> success
+    rolling_back --> rolled_back
+    connecting --> failed: auth / host key
+    success --> [*]
+    rolled_back --> [*]
+```
+</details>
+
+<details>
+<summary><b>⛔ What the denylist catches (click to expand)</b></summary>
+<br/>
+
+Matching is on **whole commands**, so `no shutdown` and `description reload-test` are allowed, but all of these are blocked:
+
+| Blocked | Also caught |
+|---|---|
+| `reload`, `erase`, `write erase`, `delete`, `format` | Cisco abbreviations: `rel` = `reload` |
+| `no username`, `crypto key zeroize` | A `do` prefix: `do reload` |
+| `request system zeroize`, `request system reboot` | Any letter case and extra spaces |
+| `debug all` | Several commands on one line |
+| `shutdown` / `no ip address` / VLAN move **on the management interface** | Removing SSH from the VTY lines while connected over SSH |
+
+</details>
+
+---
+
+## 🧩 Supported platforms
+
+| Vendor | OS driver (`os_id`) | Device types | Rollback strategy | Status |
+|---|---|---|---|---|
+| **Cisco** | `cisco_ios` | Switch · L3 switch · Router | `archive` + `configure terminal revert timer` | 🟡 experimental |
+| **Arista** | `arista_eos` | L3 switch | `configure session` + `commit timer` | 🟡 experimental |
+| **Juniper** | `juniper_junos` | Switch · L3 switch · Router | `commit confirmed N` | 🟡 experimental |
+| **Aruba (HPE)** | `aruba_aoscx` | Switch · L3 switch | `checkpoint auto N` | 🟡 experimental |
+| MikroTik | `mikrotik_routeros` | Router · Switch | Restore from backup | 🧪 opt-in |
+| Huawei | `huawei_vrp` | Switch | Restore from backup | 🧪 opt-in |
+| D-Link | `dlink_ds` | Switch | Restore from backup | 🧪 opt-in |
+| TP-Link | `tplink_jetstream` | Switch | Restore from backup | 🧪 opt-in |
+| Access points · cameras | `ap_controller` · `camera_onvif` | AP · Camera | – | 📋 inventory + status only |
+
+> [!NOTE]
+> A driver is marked **tested** only after it has been proven on an emulator (GNS3 / Cisco CML-Free,
+> vJunos, cEOS-lab, AOS-CX Simulator, MikroTik CHR) following [docs/LAB_TESTING.md](docs/LAB_TESTING.md).
+> Until then, `production` pushes need `ENABLE_EXPERIMENTAL_DRIVERS=true`. 🧪 drivers are disabled unless that
+> flag is set, and are labelled in the UI. Per-driver notes: [docs/drivers/](docs/drivers/).
+
+---
+
+## 🚀 Quick start
+
+**Requirements (all free, Windows 11):** Python 3.12 (3.10 works for now), Node.js 20+,
+MongoDB Community Server on `127.0.0.1:27017`, Git.
+
+```powershell
+git clone https://github.com/munisaidivith19-sketch/NETCONFIG.git
+cd NETCONFIG
+python run.py --demo        # simulated device: try everything without a lab
+```
+
+`run.py` uses only the standard library. It creates `backend\.venv`, installs the pinned packages, creates
+`backend\.env`, checks the settings and MongoDB, offers to create the first admin, builds the frontend, starts the
+app and opens the browser. Every step prints **OK** or **FAIL**, and a failure tells you how to fix it.
+
+| Command | What it does |
+|---|---|
+| `python run.py` | Production mode on http://127.0.0.1:8000 |
+| `python run.py --demo` | Simulated Cisco switch instead of the real network |
+| `python run.py --dev` | Backend auto-reload + Vite dev server on `:5173` |
+| `python run.py --test` | Backend and frontend test suites |
+
+<details>
+<summary><b>🛠️ Manual setup, step by step</b></summary>
+<br/>
+
 ```powershell
 # 1. Backend: creates backend\.venv, installs pinned packages, creates backend\.env, starts the API
 powershell -ExecutionPolicy Bypass -File scripts\dev-backend.ps1
 # (stop it with Ctrl+C after it starts once)
 
-# 2. Create the first admin (password is typed, never shown)
+# 2. Create the first admin (the password is typed, never shown)
 cd backend
 .venv\Scripts\python scripts\create_user.py admin --role admin
 
@@ -31,186 +349,200 @@ npm ci
 ```
 The sample catalog is loaded automatically on first start (or run `scripts\seed_catalog.py`).
 
-## Run (development)
-Two terminals:
+**Development (two terminals):**
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\dev-backend.ps1   # API on http://127.0.0.1:8000
 cd frontend; npm run dev                                          # UI  on http://127.0.0.1:5173
 ```
-Open http://127.0.0.1:5173. Vite forwards `/api` to the backend, so the browser sees one origin.
+Vite forwards `/api` to the backend, so the browser sees one origin.
 
-## Run everything with one command
-```powershell
-python run.py              # production mode; does any missing setup first, opens the browser
-python run.py --demo       # simulated device instead of the network (demos, no lab needed)
-python run.py --dev        # backend auto-reload + Vite dev server on :5173
-python run.py --test       # backend + frontend tests
-```
-`run.py` (standard library only) creates `backend\.venv`, installs the pinned packages when
-`requirements.txt` changes, creates `backend\.env`, checks the settings and MongoDB, offers to create the first
-admin, installs and builds the frontend, then starts the app. Every step prints OK or FAIL. A failure shows
-what went wrong, the last lines of output and how to fix it (MongoDB not running, port in use, a bad `.env`
-value, no internet, ...).
-
-## Run (daily use, one process, PowerShell)
+**Daily use (one process):**
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\start.ps1        # -NoBrowser to skip opening the browser
 ```
-It checks MongoDB, rebuilds the frontend if a source file is newer than `frontend\dist`, starts the app with
-`ENV=production` (API docs off, simulation refused) and opens http://127.0.0.1:8000, where FastAPI serves the
-built frontend. Using the app: **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)**.
+It checks MongoDB, rebuilds the frontend if a source file changed, starts the app with `ENV=production`
+(API docs off, simulation refused) and opens http://127.0.0.1:8000.
+</details>
 
-## Try a push without a device (simulation mode)
-For demos and UI work only. Pushes go to an in-memory pretend Cisco switch, not the network, and a
-yellow banner says so on every page. It is refused when `ENV=production`.
+<details>
+<summary><b>🧪 Try a push without a device (simulation mode)</b></summary>
+<br/>
+
+For demos and UI work only. Pushes go to an in-memory pretend Cisco switch, and a yellow banner says so on
+every page. Simulation is refused when `ENV=production`.
+
 ```powershell
 cd backend
 $env:SIMULATE_DEVICES="true"; .venv\Scripts\python -m app
 ```
-Add a device (for example model *Cisco IOSvL2*, management IP `10.0.0.2`), then Configure → Preview →
-Create job → enter any username and password (the password `wrong` simulates a login failure) → Run.
-Real testing uses GNS3 / CML: follow `docs/LAB_TESTING.md`.
+Add a device (for example model *Cisco IOSvL2*, management IP `10.0.0.2`), then
+**Configure → Preview → Create job → enter any username and password → Run**.
+The password `wrong` simulates a login failure.
 
-**Public online demo** (Render + MongoDB Atlas, simulated devices only, `DEMO_MODE=true`): step by step in
-**[docs/DEPLOY_RENDER.md](docs/DEPLOY_RENDER.md)**. The real tool is never deployed to the cloud – it must sit
-inside the network it configures.
+**Public online demo** (Render + MongoDB Atlas, simulated devices only, `DEMO_MODE=true`):
+see [docs/DEPLOY_RENDER.md](docs/DEPLOY_RENDER.md). The real tool is never deployed to the cloud, because it must
+sit inside the network it configures.
+</details>
 
-## Live overview (Phase 4B)
-The **Overview** page is the home page. Everything on it comes from the backend (`GET /api/overview`):
-- **Status check:** every `STATUS_POLL_SECONDS` (default 60, `0` turns it off) a background thread checks each
-  device with a TCP connection to its SSH (or lab Telnet) port, or a ping when the device has no CLI port
-  (access points, cameras). Results go to `devices.status` and a 14-day `status_samples` history.
-  Engineers can press **Check status now**.
-- **Read device facts:** select a device on the map and enter a device login. The app connects once (same host-key
-  pinning as a push), runs only `show` commands, and stores the parsed model, version, serial, LLDP/CDP neighbours
-  and VLAN table. The login is used once and never stored. If the device reports a different OS or model than the
-  inventory says, a warning appears, because commands generated for the wrong OS would be wrong.
-- **Map:** routers at the top, then Layer 3 switches, switches, and access points / cameras. Links come from
-  LLDP/CDP and from access point uplinks. Neighbours not in the inventory are shown with a dashed border.
-  Use the arrow keys to move between devices and Enter to select one.
-- **Charts:** changes per day (14 days, succeeded vs failed or rolled back), reachable devices (24 h) and devices
-  by category. Each chart has a **Show as table** button with the same numbers.
+<details>
+<summary><b>🤖 Turning on the AI assistant</b></summary>
+<br/>
 
-SNMPv3 polling is **not** built yet: it needs a new library (`pysnmp`), which needs the author's approval first.
-
-## More than one device (Configure tabs)
-- **Several switches** (Configure → Device change → *Several switches*): the same VLANs and port settings
-  pushed to 2–20 switches one after another; by default it stops at the first switch that fails.
-- **Router link**: pick two routers, their facing ports and a /30 or /31. Both sides get their address and
-  matching OSPF / EIGRP / eBGP settings, and the two plans are checked to match before anything is sent.
-  Both sides are applied and verified, then confirmed together; if one side fails, the other is rolled back.
-  (One narrow exception: if B's confirm fails in the seconds after A's, A cannot be rolled back automatically.
-  A is then **not saved**, and the job asks you to remove the link from A or reload it.)
-- **First-time setup**: a new device over its serial console (USB cable, COMx) or a GNS3/CML lab console.
-  Sets hostname, management address, gateway, admin user, enable secret, RSA keys, SSH v2 and SSH-only VTY
-  lines, then tests an SSH login. Only if that works is the device switched to SSH.
-- **Templates**: save the Configure form as a named template (never with passwords) and load it later.
-
-## How a push works
-1. **Create job** (Configure step 4): the exact commands are frozen with a SHA-256 hash. No credentials.
-2. **Approval** (only devices tagged `production`): a *different* admin approves in History within 24 hours.
-3. **Run**: the device login (and the password of a local user the plan creates) is typed now, sent once,
-   kept in memory for this job only and wiped when it ends. The commands are regenerated and must match
-   the approved hash.
-4. **Push engine**: connect (SSH host key checked) → back up `show running-config` → find the interface
-   that holds the management IP → denylist + management checks → apply inside
-   `configure terminal revert timer N` → stop at the first CLI error → verify with `show` commands →
-   `configure confirm` → `write memory`. Any error after applying → `configure revert now`; if the device
-   is unreachable, its own timer restores the old config.
-5. **History** shows the timeline, checks, the masked transcript and the masked backup.
-
-The Cisco IOS driver is still **experimental** (not proven on an emulator yet). Lab devices can be pushed;
-devices tagged `production` additionally need `ENABLE_EXPERIMENTAL_DRIVERS=true` until the driver is
-marked `tested` (Phase 3B lab tests).
-
-## UI quality (Phase 4C)
-Every page was reviewed in light and dark themes, at desktop and 375 px phone width. The full write-up is in
-`docs/UI_REVIEW.md`.
-- **Contrast:** computed to WCAG 2.1 AA in both themes. Seven light-theme token values were darkened.
-- **Keyboard:** the network map and each chart are one Tab stop, moved with the arrow keys. Focus moves to
-  each new wizard step, and charts have a "Show as table" option.
-- **Phone:** the map and charts draw at the real panel width, so nodes and labels stay readable at 375 px.
-- **Copy:** one word per concept ("job"). Safety warnings say what to do.
-- **Rendered check:** the production build was loaded in headless Edge: 12 pages × 2 themes × 2 widths =
-  48 views. All pass: no horizontal scroll, no console or CSP errors, every control at least 44 px.
-
-## AI assistant (Phase 5A, optional)
 Off by default. Set `AI_PROVIDER` in `backend\.env` to `ollama` (runs on this PC, free, no key), `groq` or
 `gemini` (free tiers, need `AI_API_KEY`), then restart.
-- **Describe what you need** (Configure → Requirements): a sentence becomes a plan draft that fills the form.
-  The draft is validated, previewed, safety-checked and approved like any plan. It never includes SSH logins
-  or custom commands, and nothing is pushed by the AI.
-- **Explain** buttons: preview and job commands, a failed push, and "Compare with the previous backup" in a
-  job.
-- Texts are masked before they are sent, and device output is treated as untrusted (prompt injection).
-  Engineers only, 10 requests per minute. Details: `docs/AI_ASSISTANT.md`.
 
-## Tests
+- **Describe what you need** (Configure → Requirements): a sentence becomes a draft plan that fills the form.
+  The draft is validated, previewed, safety-checked and approved like any other plan. It never includes SSH logins
+  or custom commands.
+- **Explain** buttons: preview and job commands, a failed push, and "Compare with the previous backup".
+- Text is masked before it is sent, and device output is treated as untrusted (prompt-injection defence).
+  Engineers only, 10 requests per minute. Details: [docs/AI_ASSISTANT.md](docs/AI_ASSISTANT.md).
+</details>
+
+---
+
+## 🔒 Security by design
+
+This is a **network security project first**. Every layer assumes something around it might be hostile.
+
+```mermaid
+flowchart LR
+    A["🌍 Other website<br/>in the browser"] -->|"cross-origin POST"| G1{{"Origin check +<br/>X-Requested-With"}}
+    B["🕳️ DNS rebinding"] -->|"Host: evil.com"| G2{{"Host header<br/>allowlist"}}
+    C["⌨️ Malicious input<br/>hostname: x;reload"] --> G3{{"Character allowlist +<br/>command denylist"}}
+    D["🕵️ MITM on SSH"] --> G4{{"Pinned SSH<br/>host keys"}}
+    E["💥 Bad change"] --> G5{{"Mgmt-IF protection +<br/>auto rollback"}}
+    G1 & G2 & G3 & G4 & G5 --> OK(["✅ Device stays safe<br/>and reachable"])
+```
+
+| Layer | Control |
+|---|---|
+| **Network exposure** | Binds to `127.0.0.1`. Any other address needs `ALLOW_REMOTE=true` **and** an HTTPS certificate, or the app refuses to start |
+| **Browser attacks** | Host allowlist (DNS rebinding), Origin check + `X-Requested-With: NetConfigStudio` (CSRF to localhost), no CORS, strict CSP, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer` |
+| **Identity** | bcrypt cost 12, 12+ character passwords, lockout after 5 failures for 15 min, server-side sessions (8 h absolute / 30 min idle) in `httpOnly` + `SameSite=Strict` cookies |
+| **Authorization** | Roles `admin` / `engineer` / `viewer`, checked on the server for every route. **Deny by default:** the app refuses to start if any route has no role check |
+| **Input** | Pydantic `extra="forbid"`, strict types (`"10"` is not a number), size limits, `ipaddress` validation, and allowlisted characters (no newline, `;`, `|`, `#`, `^`, `?`) so text fields can't inject CLI commands |
+| **Device access** | Passwords in memory only, SSH host keys pinned (TOFU, admin re-accepts on change), Telnet only for lab consoles on loopback / RFC 1918 |
+| **Change safety** | Denylist, management-interface protection, two-person rule for `production`, frozen command hash, automatic rollback |
+| **Accountability** | Append-only audit log with a **hash chain**, so edits or deletions can be detected. Secrets are masked everywhere |
+| **Supply chain** | Pinned versions; `pip-audit`, `npm audit`, `bandit` and `ruff` before each release |
+
+<sub>Deep dive: [docs/SECURITY.md](docs/SECURITY.md) (STRIDE threat model and compliance table) ·
+[docs/SECURITY_TESTING.md](docs/SECURITY_TESTING.md) (how to demo each control) ·
+[docs/ACCEPTED_RISKS.md](docs/ACCEPTED_RISKS.md)</sub>
+
+---
+
+## 🧰 Tech stack
+
+<table>
+<tr><td><b>Backend</b></td><td>Python 3.12 (3.10 compatible) · FastAPI · Pydantic v2 · Uvicorn · Netmiko · Paramiko · pyserial · PyMongo · bcrypt</td></tr>
+<tr><td><b>Frontend</b></td><td>React 19 · Vite · React Router · plain CSS with design tokens · lucide-react · Inter & JetBrains Mono</td></tr>
+<tr><td><b>Database</b></td><td>MongoDB Community Server (local) – catalog, inventory, jobs, backups, audit log</td></tr>
+<tr><td><b>Quality</b></td><td>pytest · Vitest + Testing Library · ruff · bandit · pip-audit · npm audit</td></tr>
+<tr><td><b>Lab</b></td><td>GNS3 · Cisco CML-Free (IOSv, IOSvL2) · Juniper vJunos · Arista cEOS-lab · Aruba AOS-CX Simulator · MikroTik CHR</td></tr>
+</table>
+
+---
+
+## ✅ Testing
+
 ```powershell
-cd backend;  .venv\Scripts\python -m pytest          # needs MongoDB running (uses database netconfig_test)
+cd backend;  .venv\Scripts\python -m pytest     # needs MongoDB (uses database netconfig_test, dropped after)
 cd frontend; npm test; npm run build
-```
-Golden files: `UPDATE_GOLDEN=1 .venv\Scripts\python -m pytest tests/drivers` rewrites
-`tests/golden/<os_id>/*.txt`; review the diff before committing.
-
-Static checks: `ruff check .`, `bandit -c pyproject.toml -r app scripts`, `pip-audit -r requirements.txt`, `npm audit`.
-
-**Everything at once** (from the project root; exit code 0 only if all pass, skipped database tests count as a failure):
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\check.ps1          # add -Quick to skip the two online audits
+powershell -ExecutionPolicy Bypass -File scripts\check.ps1   # everything at once (-Quick skips online audits)
 ```
 
-## Security in one minute
-- **Localhost only** by default. `HOST` other than 127.0.0.1 needs `ALLOW_REMOTE=true` **and**
-  `SSL_CERTFILE`/`SSL_KEYFILE`: the app refuses to start without HTTPS.
-- **Host allowlist** blocks DNS rebinding; **Origin + `X-Requested-With: NetConfigStudio`** blocks
-  other websites from driving the API (CSRF to localhost). No CORS is ever answered.
-- **Strict CSP** and security headers; no inline scripts.
-- **Users and roles** (admin / engineer / viewer), bcrypt cost 12, 12+ character passwords,
-  lockout after 5 failures for 15 minutes (atomic counter), server-side sessions (8 h absolute, 30 min idle).
-- **Strict input:** unknown fields are rejected and types are strict (`"10"` is not a number).
-- **Deny by default:** the app refuses to start if any API route has no role check.
-- **Device passwords are never stored**: they are typed at push time and kept in memory for that job only.
-  The browser is told not to save them either.
-- **SSH host keys are pinned** on first connection. If a device later offers a different key, the push stops
-  before the password is sent, until an admin compares and accepts the new fingerprint (Admin → SSH host keys).
-- **Two-person rule** for `production` devices, and **automatic rollback** (Cisco revert timer).
-  A job runs only against the address and connection method it was previewed (and approved) for, and only
-  an admin can change the address, connection or model of a `production` device.
-- **Custom commands** may not contain passwords, keys or SNMP communities (they are stored in the job record).
-- **Audit log** is append-only with a hash chain, so edits or deletions are detectable.
-- **No CLI injection:** every text field in a plan uses a character allowlist (no newline, `;`, `|`,
-  `#`, `^`, `?`), so a hostname, description or banner can never start a second command. The final
-  command list is also checked against a denylist (`reload`, `erase`, `do rel`, …) and against
-  changes that would cut the management connection.
+| Suite | What it proves |
+|---|---|
+| **Golden files** | Each driver × feature produces exactly the expected commands (`tests/golden/<os_id>/*.txt`) |
+| **Push engine** | With a fake Netmiko connection: success, CLI error mid-way, unreachable → rollback, denylist, management interface, masking |
+| **Security** | Wrong Host header, cross-origin POST, missing custom header, unauthenticated / viewer access, lockout, oversize input |
+| **Database** | Real local MongoDB in a separate test database. A phase is not done while these are skipped |
+| **Frontend** | Vitest + Testing Library for every page and wizard, plus a production build |
 
-Details: **`docs/SECURITY.md`** (STRIDE threat model, CLAUDE.md §8 compliance table, limitations),
-**`docs/SECURITY_TESTING.md`** (how to demo each control), `docs/adr/`, `docs/TEST_PLAN.md`.
+<sub>Rewrite golden files after an intended change: `UPDATE_GOLDEN=1 .venv\Scripts\python -m pytest tests/drivers`, then review the diff.</sub>
 
-## Project layout
-```
-backend/   FastAPI app (app/), tests/, scripts/
-frontend/  React + Vite app (liquid-glass design: src/styles/tokens.css, app.css)
-docs/      system design, ADRs, diagrams, test plan, drivers, lab testing, accepted risks
-scripts/   Windows helper scripts
+---
+
+## 📁 Project layout
+
+```text
+NETCONFIG/
+├── run.py                    one-command launcher (setup, checks, start, tests)
+├── backend/
+│   ├── app/
+│   │   ├── api/              routers: auth, catalog, devices, plans, jobs, audit, overview …
+│   │   ├── drivers/          cisco_ios · arista_eos · juniper_junos · aruba_aoscx · experimental/
+│   │   ├── services/         validation · safety · push · jobs · audit
+│   │   ├── security/         localhost guard · sessions · CSRF · RBAC · rate limit · masking
+│   │   └── data/catalog.json brands → series → models → OS drivers
+│   ├── tests/                unit, security, push-engine and golden-file tests
+│   └── scripts/              create_user · seed_catalog · NetBox device-type import
+├── frontend/src/             pages · components · lib · styles/tokens.css (design system)
+├── docs/                     design, ADRs, security, drivers, lab testing, user guide
+└── scripts/                  dev-backend.ps1 · start.ps1 · check.ps1
 ```
 
-## Progress
+---
+
+## 🗺️ Roadmap
+
+<details>
+<summary><b>Build progress, phase by phase (click to expand)</b></summary>
+<br/>
+
 | Phase | Part | Status |
 |---|---|---|
-| 1 | 1A architecture, ADRs, diagrams, test plan | done |
-| 1 | 1B backend skeleton, security foundation, login UI | done |
-| 1 | 1C catalog and device inventory | done |
-| 1 | 1D review | done |
-| 2 | 2A Cisco IOS research, 2B plan validation, Cisco driver, preview API, Configure wizard | done |
-| 2 | 2C review | done |
-| 3 | 3A safe push engine, approvals, live progress, History, SSH host keys | done |
-| 3 | 3B console bootstrap, router link wizard, multi-device, templates | done (lab checklist in `docs/LAB_TESTING.md` not run yet) |
-| 3 | 3C review (code review, simplify, security review) | done |
-| 4 | 4A Arista, Juniper, Aruba drivers; experimental MikroTik, Huawei, D-Link, TP-Link; APs and cameras | done (all drivers experimental until `docs/LAB_TESTING.md` Part B passes) |
-| 4 | 4B status polling, read-only discovery, topology, live Overview | done (SNMPv3 not built: needs approval for `pysnmp`) |
-| 4 | 4C UI quality pass (contrast, keyboard, phone width, copy; see `docs/UI_REVIEW.md`) | done |
-| 4 | 4D review | done |
-| 5 | 5A AI assistant (Ollama / Groq / Gemini; draft + explain) | done (not yet tried against a live provider) |
-| 5 | 5B security hardening (§8 review, HTTPS for remote mode, strict types, STRIDE docs) | done |
-| 5 | 5C clean-up, docs and release (tech debt, review + simplify, user guide, driver guide, diagrams, `start.ps1`, `check.ps1`, release checklist) | done |
+| 1 | 1A architecture, ADRs, diagrams, test plan | ✅ done |
+| 1 | 1B backend skeleton, security foundation, login UI | ✅ done |
+| 1 | 1C catalog and device inventory | ✅ done |
+| 1 | 1D review | ✅ done |
+| 2 | 2A Cisco IOS research, 2B plan validation, Cisco driver, preview API, Configure wizard | ✅ done |
+| 2 | 2C review | ✅ done |
+| 3 | 3A safe push engine, approvals, live progress, History, SSH host keys | ✅ done |
+| 3 | 3B console bootstrap, router link wizard, multi-device, templates | ✅ done (lab checklist not run yet) |
+| 3 | 3C review (code review, simplify, security review) | ✅ done |
+| 4 | 4A Arista, Juniper, Aruba drivers; experimental MikroTik, Huawei, D-Link, TP-Link; APs and cameras | ✅ done (experimental until lab tests pass) |
+| 4 | 4B status polling, read-only discovery, topology, live Overview | ✅ done |
+| 4 | 4C UI quality pass (contrast, keyboard, phone width, copy) | ✅ done |
+| 4 | 4D review | ✅ done |
+| 5 | 5A AI assistant (Ollama / Groq / Gemini; draft + explain) | ✅ done (not yet tried with a live provider) |
+| 5 | 5B security hardening (§8 review, HTTPS for remote mode, strict types, STRIDE) | ✅ done |
+| 5 | 5C clean-up, docs and release | ✅ done |
+
+</details>
+
+**Next up**
+- [ ] Run the emulator lab checklist and promote drivers from *experimental* to **tested**
+- [ ] SNMPv3 polling (needs the `pysnmp` library, waiting for approval)
+- [ ] Try the AI assistant against live providers
+
+---
+
+## 📚 Documentation
+
+| Guide | For |
+|---|---|
+| [User guide](docs/USER_GUIDE.md) | Using every page, step by step |
+| [System design](docs/SYSTEM_DESIGN.md) · [ADRs](docs/adr/) | How and why it is built this way |
+| [Drivers](docs/DRIVERS.md) · [per-vendor notes](docs/drivers/) | Adding or reviewing an OS driver |
+| [Security](docs/SECURITY.md) · [Security testing](docs/SECURITY_TESTING.md) | Threat model and how to demo each control |
+| [Lab testing](docs/LAB_TESTING.md) | Proving a driver on GNS3 / CML / vJunos / cEOS |
+| [Test plan](docs/TEST_PLAN.md) · [UI review](docs/UI_REVIEW.md) | What is tested and how the UI was checked |
+| [Deploy demo on Render](docs/DEPLOY_RENDER.md) | Public demo with simulated devices only |
+| [Release checklist](docs/RELEASE_CHECKLIST.md) · [Tech debt](docs/TECH_DEBT.md) · [Accepted risks](docs/ACCEPTED_RISKS.md) | Maintainers |
+
+---
+
+<div align="center">
+
+**NetConfig Studio**: *plan → validate → preview → push → verify → audit.*
+
+<sub>Built phase by phase as a network-security engineering project. Free tools only, runs natively on Windows 11, no Docker.</sub>
+
+<br/><br/>
+
+<a href="#top"><img src="https://img.shields.io/badge/↑_back_to_top-0d2233?style=for-the-badge" alt="Back to top"/></a>
+
+</div>
